@@ -29,6 +29,7 @@ dependencies:
 - containers
 - transformers
 - string-transform
+- lens
 
 ghc-options:
 - -Wall

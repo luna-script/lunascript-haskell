@@ -6,6 +6,10 @@ data Expr
     | EInt Integer
     | Var Text
     | EIf Expr Expr Expr
+    | Fun Text Expr
+    | FunApp Expr Expr
+    | EThunk Expr
+    | ExecThunk Expr
     deriving (Show, Eq)
 
 data Stmt =

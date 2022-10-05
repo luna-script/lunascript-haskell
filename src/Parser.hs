@@ -3,6 +3,7 @@ module Parser where
 
 import           AST
 import           Control.Monad.Combinators.Expr
+import           Data.Foldable                  as F
 import           Data.Functor.Identity
 import           Data.String.Transform
 import qualified Data.Text                      as DT
@@ -47,7 +48,9 @@ ops =
     , InfixL (BinOp "/" <$ symbol "/")],
     [ InfixL (BinOp "+" <$ symbol "+")
     , InfixL (BinOp "-" <$ symbol "-")],
-    [ InfixN (BinOp "<" <$ symbol "<")]
+    [ InfixN (BinOp "<" <$ symbol "<")
+    , InfixN (BinOp "==" <$ symbol "==")
+    ]
     ]
 
 expr :: Parser Expr
@@ -59,6 +62,7 @@ parens = between (symbol "(") (symbol ")")
 factor :: Parser Expr
 factor = parens expr
     <|> exprIf
+    <|> try app
     <|> EInt <$> lexeme L.decimal
     <|> Var <$> lexeme identifier
 
@@ -70,12 +74,34 @@ exprIf = do
     symbol "else"
     EIf cond then_expr <$> expr
 
+app :: Parser Expr
+app = do
+    e <- parens expr <|> (Var <$> lexeme identifier)
+    args <- parens (expr `sepBy` symbol ",")
+    case args of
+        []  -> pure $ ExecThunk e
+        _:_ -> pure $ F.foldl' FunApp e args
 
 program :: Parser [Stmt]
 program = stmt `sepEndBy` symbol ";"
 
 stmt :: Parser Stmt
-stmt = do
+stmt = try topLevelLet
+    <|> topLevelFunDef
+
+topLevelFunDef :: Parser Stmt
+topLevelFunDef = do
+    symbol "let"
+    ident <- identifier
+    args <- parens (identifier `sepBy` symbol ",")
+    symbol "="
+    e <- expr
+    case args of
+      []  -> pure $ TopLevelLet ident $ EThunk e
+      _:_ -> pure $ TopLevelLet ident $ F.foldr Fun e args
+
+topLevelLet :: Parser Stmt
+topLevelLet = do
     symbol "let"
     ident <- identifier
     symbol "="

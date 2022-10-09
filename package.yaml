@@ -30,6 +30,7 @@ dependencies:
 - transformers
 - string-transform
 - lens
+- mtl
 
 ghc-options:
 - -Wall

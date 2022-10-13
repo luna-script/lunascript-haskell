@@ -5,12 +5,13 @@
 {-# LANGUAGE TemplateHaskell        #-}
 module TypInf where
 import           AST
+import           Control.Exception
 import           Control.Lens              hiding (op)
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State
 import           Data.IORef
 import qualified Data.Map                  as M
-import           Data.Maybe                (isJust)
+import           Data.String.Transform
 import           Data.Text
 
 data Typ = TInt
@@ -18,6 +19,12 @@ data Typ = TInt
     | TFun Typ Typ
     | TVar Integer (IORef (Maybe Typ))
     | TThunk Typ
+
+data TypeCheckException = TypeDoesNotMatch Text Text
+    | VariableNotFound Text
+    | OccurError
+    deriving (Show)
+instance Exception TypeCheckException
 
 showTyp :: Typ -> IO String
 showTyp TInt = pure "TInt"
@@ -62,7 +69,7 @@ tinfExpr (Var x) = do
     tenv <- use typeEnv
     case M.lookup x tenv of
         Just t  -> pure t
-        Nothing -> error $ "variable " ++ show x ++ " is undefined"
+        Nothing -> throw $ VariableNotFound x
 tinfExpr (Fun x e) = do
     t1 <- newTVar
     tenv <- use typeEnv
@@ -90,7 +97,9 @@ tinfExpr (ExecThunk e) = do
     t <- tinfExpr e
     case t of
         TThunk t' -> pure t'
-        _         -> error  "unify error"
+        _         -> do
+            showt <- liftIO $ showTyp t
+            throw $ TypeDoesNotMatch "Thunk" $ toTextStrict showt
 
 execTinfExpr :: Expr -> IO Typ
 execTinfExpr e = evalStateT (tinfExpr e) (TEnv 0 M.empty)
@@ -133,18 +142,21 @@ unify (TVar n1 r1) t2 = do
                 Just typ2 -> unify (TVar n1 r1) typ2
                 Nothing   -> do
                     isOccur <- occur n1 t2
-                    if isOccur then error "occurs error" else liftIO $ writeIORef r1 (Just t2)
+                    if isOccur then throw OccurError else liftIO $ writeIORef r1 (Just t2)
         _ -> do
             isOccur <- occur n1 t2
-            if isOccur then error "occurs error" else liftIO $ writeIORef r1 (Just t2)
+            if isOccur then throw OccurError else liftIO $ writeIORef r1 (Just t2)
 unify t1 (TVar n2 r2) = do
     t' <- liftIO $ readIORef r2
     case t' of
         Just typ -> unify t1 typ
         Nothing  -> do
             isOccur <- occur n2 t1
-            if isOccur then error "occurs error" else liftIO $ writeIORef r2 (Just t1)
-unify _ _ = error "unify error"
+            if isOccur then throw OccurError else liftIO $ writeIORef r2 (Just t1)
+unify t1 t2 = do
+    t1' <- liftIO $ showTyp t1
+    t2' <- liftIO $ showTyp t2
+    throw $ TypeDoesNotMatch (toTextStrict t1') (toTextStrict t2')
 
 occur :: Integer -> Typ -> StateT TEnv IO Bool
 occur _ TInt = pure False

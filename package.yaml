@@ -31,6 +31,7 @@ dependencies:
 - string-transform
 - lens
 - mtl
+- safe-exceptions
 
 ghc-options:
 - -Wall

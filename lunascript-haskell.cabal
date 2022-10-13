@@ -47,6 +47,7 @@ library
     , megaparsec
     , mtl
     , parser-combinators
+    , safe-exceptions
     , string-transform
     , text
     , transformers
@@ -72,6 +73,7 @@ executable lunascript-haskell-exe
     , megaparsec
     , mtl
     , parser-combinators
+    , safe-exceptions
     , string-transform
     , text
     , transformers
@@ -98,6 +100,7 @@ test-suite lunascript-haskell-test
     , megaparsec
     , mtl
     , parser-combinators
+    , safe-exceptions
     , string-transform
     , text
     , transformers

@@ -90,9 +90,9 @@ compileStmt (TopLevelLet name (Fun arg e)) = do
         functionEnv' = M.insert name (ConstantOperand ref) functionEnv
     env .= functionEnv'
     function (Name $ toShortByteString name) (Prelude.zip (repeat i32) (Prelude.map ( ParameterName . toShortByteString ) args)) i32 $ \oprs -> do
-    let newEnv = F.foldr (\(k,v) env -> M.insert k v env) functionEnv' (Prelude.zip args oprs)
-    opr <- evalStateT (compileExpr e') (Env constantEnv newEnv)
-    ret opr
+        let newEnv = F.foldr (\(k,v) env -> M.insert k v env) functionEnv' (Prelude.zip args oprs)
+        opr <- evalStateT (compileExpr e') (Env constantEnv newEnv)
+        ret opr
 compileStmt (TopLevelLet name (EThunk e)) = do
     env' <- get
     e' <- function (Name $ toShortByteString name) [] i32 $ \[] -> do

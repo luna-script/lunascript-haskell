@@ -29,6 +29,7 @@ library
       Compile
       Lib
       Parser
+      TypInf
   other-modules:
       Paths_lunascript_haskell
   hs-source-dirs:
@@ -44,7 +45,9 @@ library
     , llvm-hs-pretty ==0.9.0.0
     , llvm-hs-pure ==9.0.0
     , megaparsec
+    , mtl
     , parser-combinators
+    , safe-exceptions
     , string-transform
     , text
     , transformers
@@ -68,7 +71,9 @@ executable lunascript-haskell-exe
     , llvm-hs-pure ==9.0.0
     , lunascript-haskell
     , megaparsec
+    , mtl
     , parser-combinators
+    , safe-exceptions
     , string-transform
     , text
     , transformers
@@ -93,7 +98,9 @@ test-suite lunascript-haskell-test
     , llvm-hs-pure ==9.0.0
     , lunascript-haskell
     , megaparsec
+    , mtl
     , parser-combinators
+    , safe-exceptions
     , string-transform
     , text
     , transformers

@@ -8,9 +8,6 @@ import           Data.Functor.Identity
 import           Data.String.Transform
 import qualified Data.Text                      as DT
 import           Data.Text.Internal.Lazy
-import qualified Data.Text.IO                   as T
-import           Data.Text.Lazy                 as DLT
-import qualified Data.Text.Lazy.IO              as LT
 import           Data.Void
 import           Text.Megaparsec
 import           Text.Megaparsec.Char

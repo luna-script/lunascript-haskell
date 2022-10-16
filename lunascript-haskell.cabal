@@ -27,8 +27,9 @@ library
   exposed-modules:
       AST
       Compile
-      Lib
+      IR
       Parser
+      Path
       TypInf
   other-modules:
       Paths_lunascript_haskell

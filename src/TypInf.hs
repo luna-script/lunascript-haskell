@@ -13,6 +13,7 @@ import           Data.IORef
 import qualified Data.Map                  as M
 import           Data.String.Transform
 import           Data.Text
+import           LLVM.AST.Type             as ASTType
 
 data Typ = TInt
     | TBool
@@ -20,9 +21,45 @@ data Typ = TInt
     | TVar Integer (IORef (Maybe Typ))
     | TThunk Typ
 
+data Typ' = TInt'
+    | TBool'
+    | TFun' Typ' Typ'
+    | TThunk' Typ'
+    deriving (Show)
+
+convertTypToTyp' :: Typ -> IO Typ'
+convertTypToTyp' TInt = pure TInt'
+convertTypToTyp' TBool = pure TBool'
+convertTypToTyp' (TFun t1 t2) = do
+    t1' <- convertTypToTyp' t1
+    t2' <- convertTypToTyp' t2
+    pure $ TFun' t1' t2'
+convertTypToTyp' (TThunk t) = do
+    t' <- convertTypToTyp' t
+    pure $ TThunk' t'
+convertTypToTyp' (TVar _ r) = do
+    t <- readIORef r
+    case t of
+        Nothing -> error "unspecialized tvar"
+        Just t' -> convertTypToTyp' t'
+
+convertTypPrimeTollvmType :: Typ' -> ASTType.Type
+convertTypPrimeTollvmType TInt'         = ASTType.i32
+convertTypPrimeTollvmType TBool'        = ASTType.i1
+convertTypPrimeTollvmType (TThunk' t)   = convertTypPrimeTollvmType t
+convertTypPrimeTollvmType (TFun' t1 t2) = let
+    separateArgsAndResultType :: Typ' -> ([Typ'], Typ')
+    separateArgsAndResultType (TFun' t1_ t2_) = let
+        (args_, result_) = separateArgsAndResultType t2_
+        in (t1_:args_, result_)
+    separateArgsAndResultType t = ([], t)
+    (args, result) = separateArgsAndResultType t2
+    in ASTType.FunctionType (convertTypPrimeTollvmType result) (fmap convertTypPrimeTollvmType $ t1:args) False
+
 data TypeCheckException = TypeDoesNotMatch Text Text
     | VariableNotFound Text
     | OccurError
+    | UnspecializedTVar
     deriving (Show)
 instance Exception TypeCheckException
 
@@ -95,11 +132,9 @@ tinfExpr (EThunk e) = do
     pure (TThunk t)
 tinfExpr (ExecThunk e) = do
     t <- tinfExpr e
-    case t of
-        TThunk t' -> pure t'
-        _         -> do
-            showt <- liftIO $ showTyp t
-            throw $ TypeDoesNotMatch "Thunk" $ toTextStrict showt
+    t' <- newTVar
+    unify (TThunk t') t
+    pure t'
 
 execTinfExpr :: Expr -> IO Typ
 execTinfExpr e = evalStateT (tinfExpr e) (TEnv 0 M.empty)
@@ -127,6 +162,7 @@ newTVar = do
 unify :: Typ -> Typ -> StateT TEnv IO ()
 unify TInt TInt = pure ()
 unify TBool TBool = pure ()
+unify (TThunk t1) (TThunk t2) = unify t1 t2
 unify (TFun t11 t21) (TFun t12 t22) = do
     unify t11 t12
     unify t21 t22

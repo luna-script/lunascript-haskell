@@ -23,6 +23,7 @@ data IRStmt m = TopLevelConst P.ShortByteString AST.Type (IRExpr m)
 
 data IRExpr m where
   IRInt :: Integer -> IRExpr m
+  IRBool :: Bool -> IRExpr m
   IROp :: (MonadIRBuilder m) => (Operand -> Operand -> m Operand) -> IRExpr m -> IRExpr m -> IRExpr m
   IRIf :: IRExpr m -> IRExpr m -> IRExpr m -> IRExpr m
   IRVar :: P.ShortByteString -> IRExpr m
@@ -31,6 +32,7 @@ data IRExpr m where
 
 convertExprToIRExpr :: (MonadIRBuilder m) => Expr -> ReaderT TEnv Identity (IRExpr m)
 convertExprToIRExpr (EInt n) = pure $ IRInt n
+convertExprToIRExpr (EBool b) = pure $ IRBool b
 convertExprToIRExpr (BinOp op lh rh) = do
     lh' <- convertExprToIRExpr lh
     rh' <- convertExprToIRExpr rh

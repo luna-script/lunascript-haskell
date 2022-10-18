@@ -4,6 +4,7 @@ import           Data.Text (Text)
 data Expr
     = BinOp Text Expr Expr
     | EInt Integer
+    | EBool Bool
     | Var Text
     | EIf Expr Expr Expr
     | Fun Text Expr

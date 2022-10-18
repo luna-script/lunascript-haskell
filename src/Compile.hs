@@ -40,6 +40,7 @@ makeFields ''Env
 
 compileIRExpr :: (MonadState s m, MonadFix m, MonadIRBuilder m, HasGlobalConstant s GlobalContextMap, HasEnv s EnvMap) => IRExpr m -> m Operand
 compileIRExpr (IRInt n) = pure $ int32 n
+compileIRExpr (IRBool b) = pure $ if b then bit 1 else bit 0
 compileIRExpr (IROp op e1 e2) = do
     e1' <- compileIRExpr e1
     e2' <- compileIRExpr e2

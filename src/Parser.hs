@@ -29,7 +29,7 @@ symbol = L.symbol sc
 
 identifier :: Parser DT.Text
 identifier = lexeme $ do
-    firstLetter <- letterChar
+    firstLetter <- oneOf ['a'..'z']
     middleLetters <- many (oneOf (['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z'] ++ ['_']) )
     lastLetters <- many (oneOf ['!', '?', '_', '\''])
     let name = DT.pack $ firstLetter : (middleLetters ++ lastLetters)
@@ -62,6 +62,9 @@ factor = parens expr
     <|> try app
     <|> EInt <$> lexeme L.decimal
     <|> Var <$> lexeme identifier
+    <|> (do
+        lit <- symbol "True" <|> symbol "False"
+        if lit == "True" then pure $ EBool True else pure $ EBool False)
 
 exprIf :: Parser Expr
 exprIf = do

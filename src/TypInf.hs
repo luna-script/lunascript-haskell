@@ -89,6 +89,7 @@ makeFields ''TEnv
 
 tinfExpr :: Expr -> StateT TEnv IO Typ
 tinfExpr (EInt _) = pure TInt
+tinfExpr (EBool _) = pure TBool
 tinfExpr (BinOp op e1 e2) | op `elem` ["+", "-", "*", "/"] = do
     t1 <- tinfExpr e1
     unify t1 TInt

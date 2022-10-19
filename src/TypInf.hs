@@ -13,22 +13,26 @@ import           Data.IORef
 import qualified Data.Map                  as M
 import           Data.String.Transform
 import           Data.Text
+import           LLVM.AST                  (Name (Name))
 import           LLVM.AST.Type             as ASTType
 
 data Typ = TInt
     | TBool
+    | TUnit
     | TFun Typ Typ
     | TVar Integer (IORef (Maybe Typ))
     | TThunk Typ
 
 data Typ' = TInt'
     | TBool'
+    | TUnit'
     | TFun' Typ' Typ'
     | TThunk' Typ'
     deriving (Show)
 
 convertTypToTyp' :: Typ -> IO Typ'
 convertTypToTyp' TInt = pure TInt'
+convertTypToTyp' TUnit = pure TUnit'
 convertTypToTyp' TBool = pure TBool'
 convertTypToTyp' (TFun t1 t2) = do
     t1' <- convertTypToTyp' t1
@@ -46,6 +50,7 @@ convertTypToTyp' (TVar _ r) = do
 convertTypPrimeTollvmType :: Typ' -> ASTType.Type
 convertTypPrimeTollvmType TInt'         = ASTType.i32
 convertTypPrimeTollvmType TBool'        = ASTType.i1
+convertTypPrimeTollvmType TUnit'        = ASTType.StructureType False []
 convertTypPrimeTollvmType (TThunk' t)   = convertTypPrimeTollvmType t
 convertTypPrimeTollvmType (TFun' t1 t2) = let
     separateArgsAndResultType :: Typ' -> ([Typ'], Typ')
@@ -66,6 +71,7 @@ instance Exception TypeCheckException
 showTyp :: Typ -> IO String
 showTyp TInt = pure "TInt"
 showTyp TBool = pure "TBool"
+showTyp TUnit = pure "TUnit"
 showTyp (TFun t1 t2) = do
     t1' <- showTyp t1
     t2' <- showTyp t2
@@ -89,6 +95,7 @@ makeFields ''TEnv
 
 tinfExpr :: Expr -> StateT TEnv IO Typ
 tinfExpr (EInt _) = pure TInt
+tinfExpr EUnit = pure TUnit
 tinfExpr (EBool _) = pure TBool
 tinfExpr (BinOp op e1 e2) | op `elem` ["+", "-", "*", "/"] = do
     t1 <- tinfExpr e1
@@ -198,6 +205,7 @@ unify t1 t2 = do
 occur :: Integer -> Typ -> StateT TEnv IO Bool
 occur _ TInt = pure False
 occur _ TBool = pure False
+occur _ TUnit = pure False
 occur n (TFun t1 t2) = (||) <$> occur n t1 <*> occur n t2
 occur n (TVar m r) = if n == m then pure True else do
     t <- liftIO $ readIORef r

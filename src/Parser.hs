@@ -57,7 +57,11 @@ parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
 factor :: Parser Expr
-factor = parens expr
+factor =  try (do
+        symbol "("
+        symbol ")"
+        pure EUnit)
+    <|> parens expr
     <|> exprIf
     <|> try app
     <|> EInt <$> lexeme L.decimal

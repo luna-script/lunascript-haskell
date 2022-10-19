@@ -5,6 +5,7 @@ data Expr
     = BinOp Text Expr Expr
     | EInt Integer
     | EBool Bool
+    | EUnit
     | Var Text
     | EIf Expr Expr Expr
     | Fun Text Expr

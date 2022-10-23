@@ -2,6 +2,7 @@
 {-# HLINT ignore "Use camelCase" #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE TemplateHaskell        #-}
 module TypInf where
 import           AST
@@ -13,48 +14,7 @@ import           Data.IORef
 import qualified Data.Map                  as M
 import           Data.String.Transform
 import           Data.Text
-import           LLVM.AST.Type             as ASTType
-
-data Typ = TInt
-    | TBool
-    | TFun Typ Typ
-    | TVar Integer (IORef (Maybe Typ))
-    | TThunk Typ
-
-data Typ' = TInt'
-    | TBool'
-    | TFun' Typ' Typ'
-    | TThunk' Typ'
-    deriving (Show)
-
-convertTypToTyp' :: Typ -> IO Typ'
-convertTypToTyp' TInt = pure TInt'
-convertTypToTyp' TBool = pure TBool'
-convertTypToTyp' (TFun t1 t2) = do
-    t1' <- convertTypToTyp' t1
-    t2' <- convertTypToTyp' t2
-    pure $ TFun' t1' t2'
-convertTypToTyp' (TThunk t) = do
-    t' <- convertTypToTyp' t
-    pure $ TThunk' t'
-convertTypToTyp' (TVar _ r) = do
-    t <- readIORef r
-    case t of
-        Nothing -> error "unspecialized tvar"
-        Just t' -> convertTypToTyp' t'
-
-convertTypPrimeTollvmType :: Typ' -> ASTType.Type
-convertTypPrimeTollvmType TInt'         = ASTType.i32
-convertTypPrimeTollvmType TBool'        = ASTType.i1
-convertTypPrimeTollvmType (TThunk' t)   = convertTypPrimeTollvmType t
-convertTypPrimeTollvmType (TFun' t1 t2) = let
-    separateArgsAndResultType :: Typ' -> ([Typ'], Typ')
-    separateArgsAndResultType (TFun' t1_ t2_) = let
-        (args_, result_) = separateArgsAndResultType t2_
-        in (t1_:args_, result_)
-    separateArgsAndResultType t = ([], t)
-    (args, result) = separateArgsAndResultType t2
-    in ASTType.FunctionType (convertTypPrimeTollvmType result) (fmap convertTypPrimeTollvmType $ t1:args) False
+import           Type
 
 data TypeCheckException = TypeDoesNotMatch Text Text
     | VariableNotFound Text
@@ -63,23 +23,6 @@ data TypeCheckException = TypeDoesNotMatch Text Text
     deriving (Show)
 instance Exception TypeCheckException
 
-showTyp :: Typ -> IO String
-showTyp TInt = pure "TInt"
-showTyp TBool = pure "TBool"
-showTyp (TFun t1 t2) = do
-    t1' <- showTyp t1
-    t2' <- showTyp t2
-    pure $ "TFun (" ++ t1' ++ ") (" ++ t2' ++ ")"
-showTyp (TVar n r) = do
-    t <- readIORef r
-    case t of
-        Just typ -> showTyp typ
-        Nothing  -> pure $ show n
-showTyp (TThunk t) = do
-    showt <- showTyp t
-    pure $ "TThunk (" ++ showt ++ ")"
-
-
 data TEnv = TEnv {
     _tEnvNewVarNum :: Integer,
     _tEnvTypeEnv   :: M.Map Text Typ
@@ -87,71 +30,71 @@ data TEnv = TEnv {
 
 makeFields ''TEnv
 
-tinfExpr :: Expr -> StateT TEnv IO Typ
-tinfExpr (EInt _) = pure TInt
-tinfExpr (EBool _) = pure TBool
+tinfExpr :: Expr Parsed -> StateT TEnv IO (Typ, Expr Typed)
+tinfExpr (EInt n) = pure (TInt, EInt n)
+tinfExpr (EBool b) = pure (TBool, EBool b)
 tinfExpr (BinOp op e1 e2) | op `elem` ["+", "-", "*", "/"] = do
-    t1 <- tinfExpr e1
+    (t1, e1') <- tinfExpr e1
     unify t1 TInt
-    t2 <- tinfExpr e2
+    (t2, e2') <- tinfExpr e2
     unify t2 TInt
-    pure TInt
+    pure (TInt, BinOp op e1' e2')
 tinfExpr (BinOp op e1 e2) | op `elem` ["==", "<", ">"] = do
-    t1 <- tinfExpr e1
+    (t1, e1') <- tinfExpr e1
     unify t1 TInt
-    t2 <- tinfExpr e2
+    (t2, e2') <- tinfExpr e2
     unify t2 TInt
-    pure TBool
+    pure (TBool, BinOp op e1' e2')
 tinfExpr BinOp {} = error "unimpremented"
-tinfExpr (Var x) = do
+tinfExpr (Var (ParsedVar x)) = do
     tenv <- use typeEnv
     case M.lookup x tenv of
-        Just t  -> pure t
+        Just t  -> pure (t, Var (TypedVar t x))
         Nothing -> throw $ VariableNotFound x
-tinfExpr (Fun x e) = do
+tinfExpr (Fun (ParsedVar x) e) = do
     t1 <- newTVar
     tenv <- use typeEnv
     typeEnv .= M.insert x t1 tenv
-    t2 <- tinfExpr e
+    (t2, e') <- tinfExpr e
     typeEnv .= tenv
-    pure $ TFun t1 t2
+    pure (TFun t1 t2, Fun (TypedVar t1 x) e')
 tinfExpr (FunApp e1 e2) = do
-    t1 <- tinfExpr e1
-    t2 <- tinfExpr e2
+    (t1, e1') <- tinfExpr e1
+    (t2, e2') <- tinfExpr e2
     t3 <- newTVar
     unify t1 (TFun t2 t3)
-    pure t3
+    pure (t3, FunApp e1' e2')
 tinfExpr (EIf cond thenExpr elseExpr) = do
-    t1 <- tinfExpr cond
+    (t1, cond') <- tinfExpr cond
     unify t1 TBool
-    t2 <- tinfExpr thenExpr
-    t3 <- tinfExpr elseExpr
+    (t2, thenExpr') <- tinfExpr thenExpr
+    (t3, elseExpr') <- tinfExpr elseExpr
     unify t2 t3
-    pure t2
+    pure (t2, EIf cond' thenExpr' elseExpr')
 tinfExpr (EThunk e) = do
-    t <- tinfExpr e
-    pure (TThunk t)
+    (t, e') <- tinfExpr e
+    pure (TThunk t, EThunk e')
 tinfExpr (ExecThunk e) = do
-    t <- tinfExpr e
+    (t, e') <- tinfExpr e
     t' <- newTVar
     unify (TThunk t') t
-    pure t'
+    pure (t', ExecThunk e')
 
-execTinfExpr :: Expr -> IO Typ
+execTinfExpr :: Expr Parsed -> IO (Typ, Expr Typed)
 execTinfExpr e = evalStateT (tinfExpr e) (TEnv 0 M.empty)
 
-tinfStmts :: [Stmt] -> StateT TEnv IO ()
-tinfStmts [] = pure ()
-tinfStmts ((TopLevelLet x e):xs) = do
+tinfStmts :: [Stmt Parsed] -> StateT TEnv IO [Stmt Typed]
+tinfStmts [] = pure []
+tinfStmts ((TopLevelLet (ParsedVar x) e):xs) = do
     typ <- newTVar
     tenv <- use typeEnv
     typeEnv .= M.insert x typ tenv
-    typ' <- tinfExpr e
+    (typ', e') <- tinfExpr e
     unify typ typ'
-    tinfStmts xs
+    (TopLevelLet (TypedVar typ x) e':) <$> tinfStmts xs
 
-execTinfStmts :: [Stmt] -> IO (M.Map Text Typ)
-execTinfStmts stmts = fmap (^.typeEnv) (execStateT (tinfStmts stmts) (TEnv 0 M.empty))
+execTinfStmts :: [Stmt Parsed] -> IO [Stmt Typed]
+execTinfStmts stmts = evalStateT (tinfStmts stmts) (TEnv 0 M.empty)
 
 newTVar :: StateT TEnv IO Typ
 newTVar = do

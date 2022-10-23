@@ -30,6 +30,7 @@ library
       IR
       Parser
       Path
+      Type
       TypInf
   other-modules:
       Paths_lunascript_haskell

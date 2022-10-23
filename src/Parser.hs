@@ -38,7 +38,7 @@ identifier = lexeme $ do
 keywords :: [DT.Text]
 keywords = ["let", "if", "else"]
 
-ops :: [[Operator Parser Expr]]
+ops :: [[Operator Parser (Expr Parsed)]]
 ops =
     [
     [ InfixL (BinOp "*" <$ symbol "*")
@@ -50,23 +50,23 @@ ops =
     ]
     ]
 
-expr :: Parser Expr
+expr :: Parser (Expr Parsed)
 expr = makeExprParser factor ops
 
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
-factor :: Parser Expr
+factor :: Parser (Expr Parsed)
 factor = parens expr
     <|> exprIf
     <|> try app
     <|> EInt <$> lexeme L.decimal
-    <|> Var <$> lexeme identifier
+    <|> Var . ParsedVar <$> lexeme identifier
     <|> (do
         lit <- symbol "True" <|> symbol "False"
         if lit == "True" then pure $ EBool True else pure $ EBool False)
 
-exprIf :: Parser Expr
+exprIf :: Parser (Expr Parsed)
 exprIf = do
     symbol "if"
     cond <- parens expr
@@ -74,22 +74,22 @@ exprIf = do
     symbol "else"
     EIf cond then_expr <$> expr
 
-app :: Parser Expr
+app :: Parser (Expr Parsed)
 app = do
-    e <- parens expr <|> (Var <$> lexeme identifier)
+    e <- parens expr <|> (Var . ParsedVar <$> lexeme identifier)
     args <- parens (expr `sepBy` symbol ",")
     case args of
         []  -> pure $ ExecThunk e
         _:_ -> pure $ F.foldl' FunApp e args
 
-program :: Parser [Stmt]
+program :: Parser [Stmt Parsed]
 program = stmt `sepEndBy` symbol ";"
 
-stmt :: Parser Stmt
+stmt :: Parser (Stmt Parsed)
 stmt = try topLevelLet
     <|> topLevelFunDef
 
-topLevelFunDef :: Parser Stmt
+topLevelFunDef :: Parser (Stmt Parsed)
 topLevelFunDef = do
     symbol "let"
     ident <- identifier
@@ -97,22 +97,23 @@ topLevelFunDef = do
     symbol "="
     e <- expr
     case args of
-      []  -> pure $ TopLevelLet ident $ EThunk e
-      _:_ -> pure $ TopLevelLet ident $ F.foldr Fun e args
+      []  -> pure $ TopLevelLet (ParsedVar ident) $ EThunk e
+      _:_ -> pure $ TopLevelLet (ParsedVar ident) $ F.foldr (Fun . ParsedVar) e args
 
-topLevelLet :: Parser Stmt
+topLevelLet :: Parser (Stmt Parsed)
 topLevelLet = do
     symbol "let"
     ident <- identifier
     symbol "="
-    TopLevelLet ident <$> expr
+    TopLevelLet (ParsedVar ident) <$> expr
 
-parseExpr :: Text -> Expr
+parseExpr :: Text -- ^
+  -> Expr Parsed
 parseExpr str = case parse (sc *> expr <* lexeme eof) "<stdin>" str of
   Left bundle -> error $ errorBundlePretty bundle
   Right ast   -> ast
 
-parseStmts :: Text -> [Stmt]
+parseStmts :: Text -> [Stmt Parsed]
 parseStmts str = case parse (sc *> program <* lexeme eof) "<stdin>" str of
   Left bundle -> error $ errorBundlePretty bundle
   Right ast   -> ast

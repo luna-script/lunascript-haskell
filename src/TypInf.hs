@@ -33,6 +33,7 @@ makeFields ''TEnv
 tinfExpr :: Expr Parsed -> StateT TEnv IO (Typ, Expr Typed)
 tinfExpr (EInt n) = pure (TInt, EInt n)
 tinfExpr (EBool b) = pure (TBool, EBool b)
+tinfExpr EUnit = pure (TUnit, EUnit)
 tinfExpr (BinOp op e1 e2) | op `elem` ["+", "-", "*", "/"] = do
     (t1, e1') <- tinfExpr e1
     unify t1 TInt
@@ -141,6 +142,7 @@ unify t1 t2 = do
 occur :: Integer -> Typ -> StateT TEnv IO Bool
 occur _ TInt = pure False
 occur _ TBool = pure False
+occur _ TUnit = pure False
 occur n (TFun t1 t2) = (||) <$> occur n t1 <*> occur n t2
 occur n (TVar m r) = if n == m then pure True else do
     t <- liftIO $ readIORef r

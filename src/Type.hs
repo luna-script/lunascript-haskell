@@ -5,6 +5,7 @@ import qualified LLVM.AST.Type as ASTType
 
 data Typ = TInt
     | TBool
+    | TUnit
     | TFun Typ Typ
     | TVar Integer (IORef (Maybe Typ))
     | TThunk Typ
@@ -12,13 +13,15 @@ data Typ = TInt
 
 data Typ' = TInt'
     | TBool'
+    | TUnit'
     | TFun' Typ' Typ'
     | TThunk' Typ'
     deriving (Show, Eq)
 
 showTyp :: Typ -> IO String
-showTyp TInt = pure "TInt"
-showTyp TBool = pure "TBool"
+showTyp TInt = pure "Int"
+showTyp TBool = pure "Bool"
+showTyp TUnit = pure "Unit"
 showTyp (TFun t1 t2) = do
     t1' <- showTyp t1
     t2' <- showTyp t2
@@ -35,6 +38,7 @@ showTyp (TThunk t) = do
 convertTypToTyp' :: Typ -> IO Typ'
 convertTypToTyp' TInt = pure TInt'
 convertTypToTyp' TBool = pure TBool'
+convertTypToTyp' TUnit = pure TUnit'
 convertTypToTyp' (TFun t1 t2) = do
     t1' <- convertTypToTyp' t1
     t2' <- convertTypToTyp' t2
@@ -51,6 +55,7 @@ convertTypToTyp' (TVar _ r) = do
 convertTypPrimeTollvmType :: Typ' -> ASTType.Type
 convertTypPrimeTollvmType TInt'         = ASTType.i32
 convertTypPrimeTollvmType TBool'        = ASTType.i1
+convertTypPrimeTollvmType TUnit'        = ASTType.StructureType False []
 convertTypPrimeTollvmType (TThunk' t)   = convertTypPrimeTollvmType t
 convertTypPrimeTollvmType (TFun' t1 t2) = let
     separateArgsAndResultType :: Typ' -> ([Typ'], Typ')

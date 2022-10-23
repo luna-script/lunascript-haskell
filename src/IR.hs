@@ -1,4 +1,5 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs        #-}
+{-# LANGUAGE TypeFamilies #-}
 module IR where
 
 import           AST
@@ -13,9 +14,8 @@ import           LLVM.AST.IntegerPredicate  as IP
 import           LLVM.IRBuilder.Instruction
 import           LLVM.IRBuilder.Monad
 import qualified LLVM.Prelude               as P
+import           Type
 import           TypInf                     hiding (TEnv)
-
-type TEnv = M.Map Text Typ'
 
 data IRStmt m = TopLevelConst P.ShortByteString AST.Type (IRExpr m)
     | TopLevelThunkDef P.ShortByteString AST.Type (IRExpr m)
@@ -30,7 +30,7 @@ data IRExpr m where
   IRFunApp :: IRExpr m -> [IRExpr m] -> IRExpr m
   IRExecThunk :: IRExpr m -> IRExpr m
 
-convertExprToIRExpr :: (MonadIRBuilder m) => Expr -> ReaderT TEnv Identity (IRExpr m)
+convertExprToIRExpr :: (MonadIRBuilder m) => Expr SimpleTyped -> Identity (IRExpr m)
 convertExprToIRExpr (EInt n) = pure $ IRInt n
 convertExprToIRExpr (EBool b) = pure $ IRBool b
 convertExprToIRExpr (BinOp op lh rh) = do
@@ -59,28 +59,23 @@ convertExprToIRExpr (FunApp e1 e2) = do
             (fun, args) = separate e1
             in (fun, args ++ [e2])
         separate e = (e, [])
-convertExprToIRExpr (Var name) = pure $ IRVar $ toShortByteString name
+convertExprToIRExpr (Var (SimpleTypedVar _ name)) = pure $ IRVar $ toShortByteString name
 convertExprToIRExpr (ExecThunk e) = IRExecThunk <$> convertExprToIRExpr e
 convertExprToIRExpr (Fun _ _) = error "unimplemented"
 convertExprToIRExpr (EThunk _) = error "unimplemented"
 
-convertStmtToIRStmt :: (MonadIRBuilder m) => Stmt -> ReaderT TEnv Identity (IRStmt m)
-convertStmtToIRStmt (TopLevelLet var (EThunk e)) = do
-    env <- ask
+convertStmtToIRStmt :: (MonadIRBuilder m) => Stmt SimpleTyped -> Identity (IRStmt m)
+convertStmtToIRStmt (TopLevelLet (SimpleTypedVar t var) (EThunk e)) = do
     e' <- convertExprToIRExpr e
-    case M.lookup var env of
-        Just t -> pure $ TopLevelThunkDef (toShortByteString var) (convertTypPrimeTollvmType t) e'
-        Nothing -> error "Internal Error"
-convertStmtToIRStmt (TopLevelLet var (Fun name e)) = do
+    pure $ TopLevelThunkDef (toShortByteString var) (convertTypPrimeTollvmType t) e'
+convertStmtToIRStmt (TopLevelLet (SimpleTypedVar t var) (Fun (SimpleTypedVar _ name) e)) = do
     let (args, body) = separate e
-    env <- ask
     e' <- convertExprToIRExpr body
-    let (argsType, resultType) = case M.lookup var env of
-            Just t  -> separateType t
-            Nothing -> error "Internal Error"
+    let (argsType, resultType) = separateType t
     pure $ TopLevelFunDef (toShortByteString var) (Prelude.zip (fmap convertTypPrimeTollvmType argsType) (toShortByteString <$> name:args)) (convertTypPrimeTollvmType resultType) e'
     where
-        separate (Fun name e) = let
+        separate :: Expr SimpleTyped -> ([Text], Expr SimpleTyped)
+        separate (Fun (SimpleTypedVar t name) e) = let
             (args, body) = separate e
             in (name:args, body)
         separate e = ([], e)
@@ -88,15 +83,12 @@ convertStmtToIRStmt (TopLevelLet var (Fun name e)) = do
             (args, result) = separateType t
             in (arg:args, result)
         separateType t = ([], t)
-convertStmtToIRStmt (TopLevelLet var e) = do
-    env <- ask
+convertStmtToIRStmt (TopLevelLet (SimpleTypedVar t var) e) = do
     e' <- convertExprToIRExpr e
-    case M.lookup var env of
-        Just t -> pure $ TopLevelConst (toShortByteString var) (convertTypPrimeTollvmType t) e'
-        Nothing -> error "InternalError"
+    pure $ TopLevelConst (toShortByteString var) (convertTypPrimeTollvmType t) e'
 
-convertStmtsToIRStmts :: (MonadIRBuilder m) => [Stmt] -> ReaderT TEnv Identity [IRStmt m]
+convertStmtsToIRStmts :: (MonadIRBuilder m) => [Stmt SimpleTyped] -> Identity [IRStmt m]
 convertStmtsToIRStmts = mapM convertStmtToIRStmt
 
-execConvertStmtsToIRStmts :: (MonadIRBuilder m) => TEnv -> [Stmt] -> [IRStmt m]
-execConvertStmtsToIRStmts env stmts = runIdentity $ runReaderT (convertStmtsToIRStmts stmts) env
+execConvertStmtsToIRStmts :: (MonadIRBuilder m) => [Stmt SimpleTyped] -> [IRStmt m]
+execConvertStmtsToIRStmts stmts = runIdentity $ convertStmtsToIRStmts stmts

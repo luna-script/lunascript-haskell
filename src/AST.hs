@@ -11,6 +11,7 @@ data Expr a where
   BinOp :: Text -> Expr a -> Expr a -> Expr a
   EInt :: Integer -> Expr a
   EBool :: Bool -> Expr a
+  EUnit :: Expr a
   Var :: XVar a -> Expr a
   EIf :: Expr a -> Expr a -> Expr a -> Expr a
   Fun :: XVar a -> Expr a -> Expr a
@@ -53,6 +54,7 @@ instance TypeOf (Expr Typed) where
         _    -> error "unimplemented"
     typeOf (EInt _) = TInt
     typeOf (EBool _) = TBool
+    typeOf EUnit = TUnit
     typeOf (Var (TypedVar t _)) = t
     typeOf (EIf _ e _) = typeOf e
     typeOf (Fun (TypedVar t _) e) = TFun t (typeOf e)
@@ -76,6 +78,7 @@ instance TypeOf (Expr SimpleTyped) where
         _    -> error "unimplemented"
     typeOf (EInt _) = TInt'
     typeOf (EBool _) = TBool'
+    typeOf EUnit = TUnit'
     typeOf (Var (SimpleTypedVar t _)) = t
     typeOf (EIf _ e _) = typeOf e
     typeOf (Fun (SimpleTypedVar t _) e) = TFun' t (typeOf e)
@@ -90,6 +93,7 @@ instance TypeOf (Expr SimpleTyped) where
 convertExprTypedToSimpleTyped :: Expr Typed -> IO (Expr SimpleTyped)
 convertExprTypedToSimpleTyped (EInt n) = pure $ EInt n
 convertExprTypedToSimpleTyped (EBool b) = pure $ EBool b
+convertExprTypedToSimpleTyped EUnit = pure EUnit
 convertExprTypedToSimpleTyped (BinOp op e1 e2) = do
     e1' <- convertExprTypedToSimpleTyped e1
     e2' <- convertExprTypedToSimpleTyped e2

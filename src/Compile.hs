@@ -63,10 +63,10 @@ compileIRExpr (IRIf condExpr thenExpr elseExpr) = mdo
 compileIRExpr (IRVar name) = do
     constantEnv <- use globalConstant
     functionEnv <- use env
-    case M.lookup name constantEnv of
-        Just x  -> call x []
-        Nothing -> case M.lookup name functionEnv of
-            Just f  -> pure f
+    case M.lookup name functionEnv of
+        Just x  -> pure x
+        Nothing -> case M.lookup name constantEnv of
+            Just f  -> call f []
             Nothing -> error $ "variable " ++ toString name ++ "is undefined"
 compileIRExpr (IRExecThunk e) = do
     e' <- compileIRExpr e
@@ -75,6 +75,18 @@ compileIRExpr (IRFunApp e1 oprs) = do
     e1' <- compileIRExpr e1
     oprs' <- mapM compileIRExpr oprs
     call e1' (Prelude.zip oprs' (repeat []))
+compileIRExpr (IRBlock xs x) = do
+    lenv <- use env
+    mapM_ compileIRBlockStmt xs
+    x' <- compileIRExpr x
+    env .= lenv
+    pure x'
+    where
+        compileIRBlockStmt (IRBExprStmt e) = compileIRExpr e >> pure ()
+        compileIRBlockStmt (IRBLet name e) = do
+            e' <- compileIRExpr e
+            localEnv <- use env
+            env .= M.insert name e' localEnv
 
 compileIRStmt :: (MonadModuleBuilder m, MonadFix m) => IRStmt (StateT Env (IRBuilderT (StateT Env m)))-> StateT Env m Operand
 compileIRStmt (TopLevelConst var t e) = do

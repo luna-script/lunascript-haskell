@@ -80,6 +80,23 @@ tinfExpr (ExecThunk e) = do
     t' <- newTVar
     unify (TThunk t') t
     pure (t', ExecThunk e')
+tinfExpr (EBlock xs x) = do
+    tenv <- use typeEnv
+    xs' <- mapM tinfBlockStmt xs
+    (t, x') <- tinfExpr x
+    typeEnv .= tenv
+    pure (t, EBlock xs' x')
+    where
+        tinfBlockStmt (BLet (ParsedVar name) e) = do
+            typ <- newTVar
+            tenv <- use typeEnv
+            typeEnv .= M.insert name typ tenv
+            (typ', e') <- tinfExpr e
+            unify typ typ'
+            pure $ BLet (TypedVar typ name) e'
+        tinfBlockStmt (BExprStmt e) = do
+            (_, e') <- tinfExpr e
+            pure $ BExprStmt e'
 
 execTinfExpr :: Expr Parsed -> IO (Typ, Expr Typed)
 execTinfExpr e = evalStateT (tinfExpr e) (TEnv 0 M.empty)

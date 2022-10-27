@@ -16,3 +16,11 @@ doAllPath str = do
     typedAst' <- mapM convertStmtTypedToSimpleTyped typedAst
     let irStmts = execConvertStmtsToIRStmts typedAst'
     LIO.putStrLn $ compileToLLVM irStmts
+
+showTypeCheck :: Data.Text.Internal.Lazy.Text -> IO ()
+showTypeCheck str = do
+    let ast = parseStmts str
+    typedAst <- execTinfStmts ast
+    typedAst' <- mapM convertStmtTypedToSimpleTyped typedAst
+    print typedAst'
+

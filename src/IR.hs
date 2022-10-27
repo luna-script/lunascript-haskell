@@ -30,6 +30,10 @@ data IRExpr m where
   IRVar :: P.ShortByteString -> IRExpr m
   IRFunApp :: IRExpr m -> [IRExpr m] -> IRExpr m
   IRExecThunk :: IRExpr m -> IRExpr m
+  IRBlock :: [IRBlockStmt m] -> IRExpr m -> IRExpr m
+
+data IRBlockStmt m = IRBExprStmt (IRExpr m)
+    | IRBLet P.ShortByteString (IRExpr m)
 
 convertExprToIRExpr :: (MonadIRBuilder m) => Expr SimpleTyped -> Identity (IRExpr m)
 convertExprToIRExpr (EInt n) = pure $ IRInt n
@@ -65,6 +69,18 @@ convertExprToIRExpr (Var (SimpleTypedVar _ name)) = pure $ IRVar $ toShortByteSt
 convertExprToIRExpr (ExecThunk e) = IRExecThunk <$> convertExprToIRExpr e
 convertExprToIRExpr (Fun _ _) = error "unimplemented"
 convertExprToIRExpr (EThunk _) = error "unimplemented"
+convertExprToIRExpr (EBlock xs x) = do
+    xs' <- mapM convertBlockStmtToIRBlockStmt xs
+    x' <- convertExprToIRExpr x
+    pure $ IRBlock xs' x'
+    where
+        convertBlockStmtToIRBlockStmt :: (MonadIRBuilder m) => BlockStmt SimpleTyped -> Identity (IRBlockStmt m)
+        convertBlockStmtToIRBlockStmt (BLet (SimpleTypedVar _ name) e) = do
+            e' <- convertExprToIRExpr e
+            pure $ IRBLet (toShortByteString name) e'
+        convertBlockStmtToIRBlockStmt (BExprStmt e) = do
+            e' <- convertExprToIRExpr e
+            pure $ IRBExprStmt e'
 
 convertStmtToIRStmt :: (MonadIRBuilder m) => Stmt SimpleTyped -> Identity (IRStmt m)
 convertStmtToIRStmt (TopLevelLet (SimpleTypedVar t var) (EThunk e)) = do

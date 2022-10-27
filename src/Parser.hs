@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
+{-# LANGUAGE BlockArguments #-}
 module Parser where
 
 import           AST
@@ -63,6 +64,7 @@ factor =
         symbol ")"
         pure EUnit
     <|> parens expr
+    <|> block
     <|> exprIf
     <|> try app
     <|> EInt <$> lexeme L.decimal
@@ -104,6 +106,23 @@ topLevelFunDef = do
     case args of
       []  -> pure $ TopLevelLet (ParsedVar ident) $ EThunk e
       _:_ -> pure $ TopLevelLet (ParsedVar ident) $ F.foldr (Fun . ParsedVar) e args
+
+block :: Parser (Expr Parsed)
+block = do
+    symbol "{"
+    stmts <- blockstmt `sepBy1` symbol ";"
+    symbol "}"
+    case last stmts of
+        BExprStmt e -> pure $ EBlock (init stmts) e
+        _           -> pure $ EBlock stmts EUnit
+    where
+        blockstmt :: Parser (BlockStmt Parsed)
+        blockstmt = (do
+            symbol "let "
+            ident <- identifier
+            symbol "="
+            BLet (ParsedVar ident) <$> expr)
+            <|> BExprStmt <$> expr
 
 topLevelLet :: Parser (Stmt Parsed)
 topLevelLet = do

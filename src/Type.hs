@@ -1,7 +1,8 @@
 module Type where
-import           Data.IORef    (IORef)
-import           GHC.IORef     (readIORef)
-import qualified LLVM.AST.Type as ASTType
+import           Data.IORef         (IORef)
+import           GHC.IORef          (readIORef)
+import           LLVM.AST.AddrSpace (AddrSpace (..))
+import qualified LLVM.AST.Type      as ASTType
 
 data Typ = TInt
     | TBool
@@ -64,5 +65,5 @@ convertTypPrimeTollvmType (TFun' t1 t2) = let
         in (t1_:args_, result_)
     separateArgsAndResultType t = ([], t)
     (args, result) = separateArgsAndResultType t2
-    in ASTType.FunctionType (convertTypPrimeTollvmType result) (fmap convertTypPrimeTollvmType $ t1:args) False
+    in ASTType.PointerType (ASTType.FunctionType (convertTypPrimeTollvmType result) (fmap convertTypPrimeTollvmType $ t1:args) False) (AddrSpace 0)
 

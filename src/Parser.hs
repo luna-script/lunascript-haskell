@@ -59,11 +59,11 @@ parens = between (symbol "(") (symbol ")")
 
 factor :: Parser (Expr Parsed)
 factor =
-    try $ do
+    try (parens expr)
+    <|> do
         symbol "("
         symbol ")"
         pure EUnit
-    <|> parens expr
     <|> block
     <|> exprIf
     <|> try app

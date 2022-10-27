@@ -44,5 +44,8 @@ assert 13 "let func(a, b) = {
     a * c + b
 };
 let main = func(2, 3);"
+assert 4 "let succ(n) = n + 1;
+let double(f, n) = f(f(n));
+let main = double(succ, 2);"
 
 echo OK

@@ -37,7 +37,7 @@ identifier = lexeme $ do
     if name `elem` keywords then fail $ "unexpected keyword: " ++ toString name else pure name
 
 keywords :: [DT.Text]
-keywords = ["let", "if", "else"]
+keywords = ["let", "if", "else", "fn"]
 
 ops :: [[Operator Parser (Expr Parsed)]]
 ops =
@@ -66,6 +66,7 @@ factor =
         pure EUnit
     <|> block
     <|> exprIf
+    <|> lambda
     <|> try app
     <|> EInt <$> lexeme L.decimal
     <|> Var . ParsedVar <$> lexeme identifier
@@ -123,6 +124,13 @@ block = do
             symbol "="
             BLet (ParsedVar ident) <$> expr)
             <|> BExprStmt <$> expr
+lambda :: Parser (Expr Parsed)
+lambda = do
+    symbol "fn"
+    args <- identifier `sepBy1` symbol ","
+    symbol "->"
+    e <- expr
+    pure $ foldr (Fun . ParsedVar) e args
 
 topLevelLet :: Parser (Stmt Parsed)
 topLevelLet = do

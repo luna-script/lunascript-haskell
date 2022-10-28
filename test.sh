@@ -47,5 +47,9 @@ let main = func(2, 3);"
 assert 4 "let succ(n) = n + 1;
 let double(f, n) = f(f(n));
 let main = double(succ, 2);"
+assert 5 "let sub = fn a, b -> a - b;
+let main = sub(7, 2);"
+assert 5 "let sub(a) = fn b -> a - b;
+let main = sub(8, 3);"
 
 echo OK

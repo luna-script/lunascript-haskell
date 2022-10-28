@@ -14,6 +14,20 @@ assert() {
   fi
 }
 
+assertStdOut() {
+  expected="$1"
+  input="$2"
+
+  actual=`echo "$input" | stack run | lli`
+
+  if [ "$actual" = "$expected" ]; then
+    echo "$input => $actual"
+  else
+    echo "$input => $expected expected, but got $actual"
+    exit 1
+  fi
+}
+
 assert 10 "let main = 10;"
 assert 5 "let main = 2 + 3;"
 assert 5 "let main = 8 - 3;"
@@ -51,5 +65,7 @@ assert 5 "let sub = fn a, b -> a - b;
 let main = sub(7, 2);"
 assert 5 "let sub(a) = fn b -> a - b;
 let main = sub(8, 3);"
+assertStdOut 1 "let main = print_int(1);"
+assertStdOut -1 "let main = print_int(1-2);"
 
 echo OK

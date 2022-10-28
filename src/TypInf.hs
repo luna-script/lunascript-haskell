@@ -112,7 +112,10 @@ tinfStmts ((TopLevelLet (ParsedVar x) e):xs) = do
     (TopLevelLet (TypedVar typ x) e':) <$> tinfStmts xs
 
 execTinfStmts :: [Stmt Parsed] -> IO [Stmt Typed]
-execTinfStmts stmts = evalStateT (tinfStmts stmts) (TEnv 0 M.empty)
+execTinfStmts stmts = evalStateT (tinfStmts stmts) (TEnv 0 initalTenv)
+
+initalTenv :: M.Map Text Typ
+initalTenv = M.fromList [("print_int", TFun TInt TUnit)]
 
 newTVar :: StateT TEnv IO Typ
 newTVar = do

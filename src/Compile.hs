@@ -41,7 +41,7 @@ makeFields ''Env
 compileIRExpr :: (MonadState s m, MonadFix m, MonadIRBuilder m, HasGlobalConstant s GlobalContextMap, HasEnv s EnvMap) => IRExpr m -> m Operand
 compileIRExpr (IRInt n) = pure $ int32 n
 compileIRExpr (IRBool b) = pure $ if b then bit 1 else bit 0
-compileIRExpr IRUnit = pure $ ConstantOperand (Undef (ASTType.StructureType False []))
+compileIRExpr IRUnit = pure llvmUnit
 compileIRExpr (IROp op e1 e2) = do
     e1' <- compileIRExpr e1
     e2' <- compileIRExpr e2
@@ -126,5 +126,16 @@ compileIRStmts (s:ss) = do
 compileToLLVM :: [IRStmt (StateT Env (IRBuilderT (StateT Env (ModuleBuilderT Identity))))] -> Data.Text.Lazy.Text
 compileToLLVM ast =
     ppllvm $ buildModule "main" $ do
-        evalStateT (compileIRStmts ast) (Env M.empty M.empty)
+        printf <- externVarArgs "printf" [ptr i8] i32
+        formatint <- globalStringPtr "%d" "$$$formatint"
+        print_int <- function "print_int" [(i32, "n")] unitType $ \[n] -> do
+            call printf [(ConstantOperand formatint, []), (n, [])]
+            ret llvmUnit
+        let initialEnv = M.fromList [("print_int", print_int)]
+        evalStateT (compileIRStmts ast) (Env M.empty initialEnv)
 
+llvmUnit :: Operand
+llvmUnit = ConstantOperand (Undef unitType)
+
+unitType :: Type
+unitType = StructureType False []

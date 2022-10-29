@@ -63,9 +63,14 @@ let double(f, n) = f(f(n));
 let main = double(succ, 2);"
 assert 5 "let sub = fn a, b -> a - b;
 let main = sub(7, 2);"
+assert 5 "let sub = fn a -> fn b -> a - b;
+let main = sub(9, 4);"
 assert 5 "let sub(a) = fn b -> a - b;
 let main = sub(8, 3);"
 assertStdOut 1 "let main = print_int(1);"
 assertStdOut -1 "let main = print_int(1-2);"
+assertStdOut -1 "let main = print_int(-1);"
+assertStdOut -3 "let main = print_int(-1 + -2);"
+assert 3 "let main = -1 * -3;"
 
 echo OK

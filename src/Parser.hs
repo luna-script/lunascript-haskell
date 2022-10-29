@@ -42,6 +42,7 @@ keywords = ["let", "if", "else", "fn"]
 ops :: [[Operator Parser (Expr Parsed)]]
 ops =
     [
+    [ Prefix (BinOp "*" (EInt (-1)) <$ symbol "-")],
     [ InfixL (BinOp "*" <$ symbol "*")
     , InfixL (BinOp "/" <$ symbol "/")],
     [ InfixL (BinOp "+" <$ symbol "+")

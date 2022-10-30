@@ -72,8 +72,11 @@ assertStdOut -1 "let main = print_int(1-2);"
 assertStdOut -1 "let main = print_int(-1);"
 assertStdOut -3 "let main = print_int(-1 + -2);"
 assert 3 "let main = -1 * -3;"
-assert 5 "let main = a; let a = 5"
+assert 5 "let main = a; let a = 5;"
 assert 5 "let main = a(); let a() = 5;"
 assert 5 "let main = add(2, 3); let add(a, b) = a + b;"
+assert 1 "let main = isOdd(3);
+let isOdd(n) = if (n==0) False else isEven(n - 1);
+let isEven(n) = if (n==0) True else isOdd(n - 1);"
 
 echo OK

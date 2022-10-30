@@ -1,11 +1,16 @@
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
-{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE BlockArguments         #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TemplateHaskell        #-}
 module Parser where
 
 import           AST
+import           Control.Lens
 import           Control.Monad.Combinators.Expr
+import           Control.Monad.State
 import           Data.Foldable                  as F
-import           Data.Functor.Identity
+import qualified Data.Set                       as S
 import           Data.String.Transform
 import qualified Data.Text                      as DT
 import           Data.Text.Internal.Lazy
@@ -14,7 +19,13 @@ import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer     as L
 
-type Parser = ParsecT Void Text Identity
+type Parser = StateT ParserEnv (ParsecT Void Text Identity)
+
+newtype ParserEnv = ParserEnv {
+    _parserEnvTopLevelVarName :: S.Set DT.Text
+}
+
+makeFields ''ParserEnv
 
 sc :: Parser ()
 sc = L.space space1 lineCmnt blockCmnt
@@ -105,6 +116,8 @@ topLevelFunDef = do
     args <- parens (identifier `sepBy` symbol ",")
     symbol "="
     e <- expr
+    varNames <- use topLevelVarName
+    topLevelVarName .= S.insert (toTextStrict ident) varNames
     case args of
       []  -> pure $ TopLevelLet (ParsedVar ident) $ EThunk e
       _:_ -> pure $ TopLevelLet (ParsedVar ident) $ F.foldr (Fun . ParsedVar) e args
@@ -138,15 +151,16 @@ topLevelLet = do
     symbol "let"
     ident <- identifier
     symbol "="
+    varNames <- use topLevelVarName
+    topLevelVarName .= S.insert (toTextStrict ident) varNames
     TopLevelLet (ParsedVar ident) <$> expr
 
-parseExpr :: Text -- ^
-  -> Expr Parsed
-parseExpr str = case parse (sc *> expr <* lexeme eof) "<stdin>" str of
-  Left bundle -> error $ errorBundlePretty bundle
-  Right ast   -> ast
+parseExpr :: Text -> (Expr Parsed, S.Set DT.Text)
+parseExpr str = case parse (runStateT (sc *> expr <* lexeme eof) $ ParserEnv S.empty) "<stdin>" str of
+  Left bundle            -> error $ errorBundlePretty bundle
+  Right (ast, parserEnv) -> (ast, parserEnv^.topLevelVarName)
 
-parseStmts :: Text -> [Stmt Parsed]
-parseStmts str = case parse (sc *> program <* lexeme eof) "<stdin>" str of
-  Left bundle -> error $ errorBundlePretty bundle
-  Right ast   -> ast
+parseStmts :: Text -> ([Stmt Parsed], S.Set DT.Text)
+parseStmts str = case parse (runStateT (sc *> program <* lexeme eof) $ ParserEnv S.empty) "<stdin>" str of
+  Left bundle            -> error $ errorBundlePretty bundle
+  Right (ast, parserEnv) -> (ast, parserEnv^.topLevelVarName)

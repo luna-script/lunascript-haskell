@@ -12,6 +12,7 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State
 import           Data.IORef
 import qualified Data.Map                  as M
+import qualified Data.Set                  as S
 import           Data.String.Transform
 import           Data.Text
 import           Type
@@ -104,15 +105,22 @@ execTinfExpr e = evalStateT (tinfExpr e) (TEnv 0 M.empty)
 tinfStmts :: [Stmt Parsed] -> StateT TEnv IO [Stmt Typed]
 tinfStmts [] = pure []
 tinfStmts ((TopLevelLet (ParsedVar x) e):xs) = do
-    typ <- newTVar
     tenv <- use typeEnv
-    typeEnv .= M.insert x typ tenv
+    typ <- case M.lookup x tenv of
+        Just t -> pure t
+        Nothing -> do
+            t <- newTVar
+            typeEnv .= M.insert x t tenv
+            pure t
     (typ', e') <- tinfExpr e
     unify typ typ'
     (TopLevelLet (TypedVar typ x) e':) <$> tinfStmts xs
 
-execTinfStmts :: [Stmt Parsed] -> IO [Stmt Typed]
-execTinfStmts stmts = evalStateT (tinfStmts stmts) (TEnv 0 initalTenv)
+execTinfStmts :: [Stmt Parsed] -> S.Set Text -> IO [Stmt Typed]
+execTinfStmts stmts varNames = evalStateT (mapM_ (\name -> do
+    typ <- newTVar
+    tenv <- use typeEnv
+    typeEnv .= M.insert name typ tenv) varNames >> tinfStmts stmts) (TEnv 0 initalTenv)
 
 initalTenv :: M.Map Text Typ
 initalTenv = M.fromList [("print_int", TFun TInt TUnit)]

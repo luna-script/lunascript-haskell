@@ -72,5 +72,8 @@ assertStdOut -1 "let main = print_int(1-2);"
 assertStdOut -1 "let main = print_int(-1);"
 assertStdOut -3 "let main = print_int(-1 + -2);"
 assert 3 "let main = -1 * -3;"
+assert 5 "let main = a; let a = 5"
+assert 5 "let main = a(); let a() = 5;"
+assert 5 "let main = add(2, 3); let add(a, b) = a + b;"
 
 echo OK

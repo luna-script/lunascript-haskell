@@ -57,7 +57,7 @@ convertTypPrimeTollvmType :: Typ' -> ASTType.Type
 convertTypPrimeTollvmType TInt'         = ASTType.i32
 convertTypPrimeTollvmType TBool'        = ASTType.i1
 convertTypPrimeTollvmType TUnit'        = ASTType.StructureType False []
-convertTypPrimeTollvmType (TThunk' t)   = convertTypPrimeTollvmType t
+convertTypPrimeTollvmType (TThunk' t)   = ASTType.PointerType (ASTType.FunctionType (convertTypPrimeTollvmType t) [] False) (AddrSpace 0)
 convertTypPrimeTollvmType (TFun' t1 t2) = let
     separateArgsAndResultType :: Typ' -> ([Typ'], Typ')
     separateArgsAndResultType (TFun' t1_ t2_) = let

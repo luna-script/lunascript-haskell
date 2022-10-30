@@ -91,28 +91,19 @@ compileIRExpr (IRBlock xs x) = do
 compileIRStmt :: (MonadModuleBuilder m, MonadFix m) => IRStmt (StateT Env (IRBuilderT (StateT Env m)))-> StateT Env m Operand
 compileIRStmt (TopLevelConst var t e) = do
     env' <- get
-    e' <- function (Name var) [] t $ \[] -> do
+    function (Name var) [] t $ \[] -> do
         val <- evalStateT (compileIRExpr e) env'
         ret val
-    globalConstant .= M.insert var e' (env'^.globalConstant)
-    pure e'
 compileIRStmt (TopLevelThunkDef name t e) = do
     env' <- get
-    e' <- function (Name name) [] t $ \[] -> do
+    function (Name name) [] t $ \[] -> do
         val <- evalStateT (compileIRExpr e) env'
         ret val
-    env .= M.insert name e' (env'^.env)
-    pure e'
 compileIRStmt (TopLevelFunDef name args returnType body) = do
     constantEnv <- use globalConstant
     functionEnv <- use env
-    let typ = FunctionType returnType (fmap fst args) False
-        ptrTyp = ASTType.PointerType typ (AddrSpace 0)
-        ref = ASTCons.GlobalReference ptrTyp (Name $ toShortByteString name)
-        functionEnv' = M.insert name (ConstantOperand ref) functionEnv
-    env .= functionEnv'
     function (Name name) (fmap (Data.Bifunctor.second ParameterName) args) returnType $ \oprs -> do
-        let newEnv = F.foldr (\(k,v) env' -> M.insert k v env') functionEnv' (Prelude.zip (fmap snd args) oprs)
+        let newEnv = F.foldr (\(k,v) env' -> M.insert k v env') functionEnv (Prelude.zip (fmap snd args) oprs)
         opr <- evalStateT (compileIRExpr body) (Env constantEnv newEnv)
         ret opr
 
@@ -123,19 +114,27 @@ compileIRStmts (s:ss) = do
     compileIRStmt s
     compileIRStmts ss
 
-compileToLLVM :: [IRStmt (StateT Env (IRBuilderT (StateT Env (ModuleBuilderT Identity))))] -> Data.Text.Lazy.Text
-compileToLLVM ast =
+compileToLLVM :: [IRStmt (StateT Env (IRBuilderT (StateT Env (ModuleBuilderT Identity))))] -> ConvertEnv -> Data.Text.Lazy.Text
+compileToLLVM ast convertEnv =
+    let toGlobalConstant name t = (let
+            typ = FunctionType t [] False
+            ptrType = ASTType.PointerType typ (AddrSpace 0)
+            ref = ASTCons.GlobalReference ptrType (Name name)
+            in ConstantOperand ref)
+        globalEnv' = M.mapWithKey toGlobalConstant (convertEnv^.globalConstant)
+        toEnv name t = (let
+            ref = ASTCons.GlobalReference t (Name name)
+            in ConstantOperand ref)
+        env' = M.mapWithKey toEnv (convertEnv^.env)
+    in
     ppllvm $ buildModule "main" $ do
         printf <- externVarArgs "printf" [ptr i8] i32
         formatint <- globalStringPtr "%d" "$$$formatint"
-        print_int <- function "print_int" [(i32, "n")] unitType $ \[n] -> do
+        function "print_int" [(i32, "n")] unitType $ \[n] -> do
             call printf [(ConstantOperand formatint, []), (n, [])]
             ret llvmUnit
-        let initialEnv = M.fromList [("print_int", print_int)]
-        evalStateT (compileIRStmts ast) (Env M.empty initialEnv)
+        evalStateT (compileIRStmts ast) (Env globalEnv' env')
 
 llvmUnit :: Operand
 llvmUnit = ConstantOperand (Undef unitType)
 
-unitType :: Type
-unitType = StructureType False []

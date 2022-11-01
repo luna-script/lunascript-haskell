@@ -78,5 +78,11 @@ assert 5 "let main = add(2, 3); let add(a, b) = a + b;"
 assert 1 "let main = isOdd(3);
 let isOdd(n) = if (n==0) False else isEven(n - 1);
 let isEven(n) = if (n==0) True else isOdd(n - 1);"
+assert 6 "let main = {
+    let a = [1, 2, 3];
+    a[0] + a[1] + a[2]
+};"
+assert 6 "let a = [1, 2, 3];
+let main = a[0] + a[1] + a[2];"
 
 echo OK

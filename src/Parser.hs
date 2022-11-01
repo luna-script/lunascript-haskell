@@ -80,11 +80,24 @@ factor =
     <|> exprIf
     <|> lambda
     <|> try app
+    <|> try vectorGet
+    <|> vector
     <|> EInt <$> lexeme L.decimal
     <|> Var . ParsedVar <$> lexeme identifier
     <|> (do
         lit <- symbol "True" <|> symbol "False"
         if lit == "True" then pure $ EBool True else pure $ EBool False)
+
+vector :: Parser (Expr Parsed)
+vector = do
+    e <- between (symbol "[") (symbol "]") $ expr `sepBy` symbol ","
+    pure $ EVector e
+
+vectorGet :: Parser (Expr Parsed)
+vectorGet = do
+    e <- appliedExpr
+    index' <- between (symbol "[") (symbol "]") expr
+    pure $ FunApp (FunApp (Var $ ParsedVar "get") index') e
 
 exprIf :: Parser (Expr Parsed)
 exprIf = do
@@ -96,11 +109,14 @@ exprIf = do
 
 app :: Parser (Expr Parsed)
 app = do
-    e <- parens expr <|> (Var . ParsedVar <$> lexeme identifier)
+    e <- appliedExpr
     args <- parens (expr `sepBy` symbol ",")
     case args of
         []  -> pure $ ExecThunk e
         _:_ -> pure $ F.foldl' FunApp e args
+
+appliedExpr :: Parser (Expr Parsed)
+appliedExpr = parens expr <|> (Var . ParsedVar <$> lexeme identifier) <|> vector
 
 program :: Parser [Stmt Parsed]
 program = stmt `sepEndBy` symbol ";"

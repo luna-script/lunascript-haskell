@@ -27,6 +27,7 @@ import           LLVM.IRBuilder.Module
 import           LLVM.IRBuilder.Monad
 import qualified LLVM.Prelude               as Pr
 import           LLVM.Pretty
+import           Type
 
 type GlobalContextMap = M.Map Pr.ShortByteString Operand
 type EnvMap = M.Map Pr.ShortByteString Operand
@@ -38,7 +39,7 @@ data Env = Env {
 
 makeFields ''Env
 
-compileIRExpr :: (MonadState s m, MonadFix m, MonadIRBuilder m, HasGlobalConstant s GlobalContextMap, HasEnv s EnvMap) => IRExpr m -> m Operand
+compileIRExpr :: (MonadState s m, MonadFix m, MonadModuleBuilder m, MonadIRBuilder m, HasGlobalConstant s GlobalContextMap, HasEnv s EnvMap) => IRExpr m -> m Operand
 compileIRExpr (IRInt n) = pure $ int32 n
 compileIRExpr (IRBool b) = pure $ if b then bit 1 else bit 0
 compileIRExpr IRUnit = pure llvmUnit
@@ -46,6 +47,20 @@ compileIRExpr (IROp op e1 e2) = do
     e1' <- compileIRExpr e1
     e2' <- compileIRExpr e2
     op e1' e2'
+compileIRExpr (IRVector xs) = do
+    xs' <- mapM compileIRExpr xs
+    structptr <- alloca (StructureType False [IntegerType 32, ArrayType 32 $ IntegerType 32]) Nothing 1
+    vecptr <- alloca (ArrayType 32 $ IntegerType 32) Nothing 1
+    index <- gep structptr [int32 0, int32 0]
+    store index 0 (int32 $ toInteger $ length xs)
+    structvec <- gep structptr [int32 0, int32 1]
+    mapM_ (\(x, i) -> do
+        ptr <- gep vecptr [int32 0, int32 i]
+        store ptr 0 x
+        ) $ zip xs' [0..]
+    vec <- load vecptr 1
+    store structvec 0 vec
+    pure structptr
 compileIRExpr (IRIf condExpr thenExpr elseExpr) = mdo
     cond <- compileIRExpr condExpr
     condBr cond ifThen ifElse
@@ -133,8 +148,12 @@ compileToLLVM ast convertEnv =
         function "print_int" [(i32, "n")] unitType $ \[n] -> do
             call printf [(ConstantOperand formatint, []), (n, [])]
             ret llvmUnit
+        function "get" [(i32, "n"), (vectorType $ IntegerType 32, "vec")] i32 $ \[n, vec] -> do
+            vec' <- gep vec [int32 0, int32 1]
+            valptr <- gep vec' [int32 0, n]
+            val <- load valptr 1
+            ret val
         evalStateT (compileIRStmts ast) (Env globalEnv' env')
 
 llvmUnit :: Operand
 llvmUnit = ConstantOperand (Undef unitType)
-

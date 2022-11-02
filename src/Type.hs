@@ -3,6 +3,7 @@ import           Data.IORef         (IORef)
 import           GHC.IORef          (readIORef)
 import           LLVM.AST
 import           LLVM.AST.AddrSpace (AddrSpace (..))
+import           LLVM.AST.Type
 import qualified LLVM.AST.Type      as ASTType
 
 data Typ = TInt
@@ -79,4 +80,4 @@ unitType :: Type
 unitType = StructureType False []
 
 vectorType :: Type -> Type
-vectorType t = PointerType (StructureType False [IntegerType 32, ArrayType 32 t]) $ AddrSpace 0
+vectorType t = ptr (StructureType False [i32, ptr $ ArrayType 32 t, ptr $ ArrayType 32 (ArrayType 32 t)])

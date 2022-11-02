@@ -84,5 +84,7 @@ assert 6 "let main = {
 };"
 assert 6 "let a = [1, 2, 3];
 let main = a[0] + a[1] + a[2];"
+assert 35 "let a = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,35];
+let main = a[34]"
 
 echo OK

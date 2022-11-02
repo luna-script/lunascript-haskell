@@ -20,9 +20,10 @@ import           IR
 import           LLVM.AST                   hiding (function, value)
 import           LLVM.AST.AddrSpace
 import           LLVM.AST.Constant          as ASTCons
+import qualified LLVM.AST.IntegerPredicate  as IP
 import           LLVM.AST.Type              as ASTType
 import           LLVM.IRBuilder.Constant
-import           LLVM.IRBuilder.Instruction
+import           LLVM.IRBuilder.Instruction as BI
 import           LLVM.IRBuilder.Module
 import           LLVM.IRBuilder.Monad
 import qualified LLVM.Prelude               as Pr
@@ -39,6 +40,12 @@ data Env = Env {
 
 makeFields ''Env
 
+width1 :: Integer
+width1 = 32
+
+bit1 :: Integer
+bit1 = 5
+
 compileIRExpr :: (MonadState s m, MonadFix m, MonadModuleBuilder m, MonadIRBuilder m, HasGlobalConstant s GlobalContextMap, HasEnv s EnvMap) => IRExpr m -> m Operand
 compileIRExpr (IRInt n) = pure $ int32 n
 compileIRExpr (IRBool b) = pure $ if b then bit 1 else bit 0
@@ -47,20 +54,47 @@ compileIRExpr (IROp op e1 e2) = do
     e1' <- compileIRExpr e1
     e2' <- compileIRExpr e2
     op e1' e2'
-compileIRExpr (IRVector xs) = do
+compileIRExpr (IRVector xs) = mdo
+    let len = toInteger $ length xs
+    cond <- icmp IP.SLT (int32 len) $ int32 (width1 + 1)
     xs' <- mapM compileIRExpr xs
-    structptr <- alloca (StructureType False [IntegerType 32, ArrayType 32 $ IntegerType 32]) Nothing 1
-    vecptr <- alloca (ArrayType 32 $ IntegerType 32) Nothing 1
-    index <- gep structptr [int32 0, int32 0]
-    store index 0 (int32 $ toInteger $ length xs)
-    structvec <- gep structptr [int32 0, int32 1]
+    condBr cond vector1 vector2
+
+    -- flat vector
+    vector1 <- block `named` "vector1"
+    structptr1 <- alloca (StructureType False [i32, ptr $ ArrayType 32 i32, ptr $ ArrayType 32 (ArrayType 32 i32)]) Nothing 1
+    idx1 <- gep structptr1 [int32 0, int32 0]
+    store idx1 0 $ int32 len
+    vecptr1 <- alloca (ArrayType 32 i32) Nothing 1
+    structvec1 <- gep structptr1 [int32 0, int32 1]
     mapM_ (\(x, i) -> do
-        ptr <- gep vecptr [int32 0, int32 i]
+        ptr <- gep vecptr1 [int32 0, int32 i]
         store ptr 0 x
         ) $ zip xs' [0..]
-    vec <- load vecptr 1
-    store structvec 0 vec
-    pure structptr
+    store structvec1 0 vecptr1
+    br end
+    endOfVector1 <- currentBlock
+
+    -- 2-dimensional vector
+    vector2 <- block `named` "vector2"
+    structptr2 <- alloca (StructureType False [i32, ptr $ ArrayType 32 i32, ptr $ ArrayType 32 (ArrayType 32 i32)]) Nothing 1
+    idx2 <- gep structptr2 [int32 0, int32 0]
+    store idx2 0 $ int32 len
+    structvec2 <- gep structptr2 [int32 0, int32 2]
+    vecptr2 <- alloca (ArrayType 32 $ ArrayType 32 i32) Nothing 1
+    mapM_ (\(x, i) -> do
+        let i2 = i `div` width1
+        let i1 = i `mod` width1
+        ptr <- gep vecptr2 [int32 0, int32 i2, int32 i1]
+        store ptr 0 x
+        ) $ zip xs' [0..]
+    store structvec2 0 vecptr2
+    br end
+    endOfVector2 <- currentBlock
+
+    -- phi phase
+    end <- block `named` "end"
+    phi [(structptr1, endOfVector1), (structptr2, endOfVector2)]
 compileIRExpr (IRIf condExpr thenExpr elseExpr) = mdo
     cond <- compileIRExpr condExpr
     condBr cond ifThen ifElse
@@ -145,14 +179,41 @@ compileToLLVM ast convertEnv =
     ppllvm $ buildModule "main" $ do
         printf <- externVarArgs "printf" [ptr i8] i32
         formatint <- globalStringPtr "%d" "$$$formatint"
-        function "print_int" [(i32, "n")] unitType $ \[n] -> do
+        printInt <- function "print_int" [(i32, "n")] unitType $ \[n] -> do
             call printf [(ConstantOperand formatint, []), (n, [])]
             ret llvmUnit
-        function "get" [(i32, "n"), (vectorType $ IntegerType 32, "vec")] i32 $ \[n, vec] -> do
+        function "get" [(i32, "n"), (vectorType i32, "vec")] i32 $ \[n, vec] -> mdo
+            idxptr <- gep vec [int32 0, int32 0]
+            idx <- load idxptr 1
+            cond <- icmp IP.SLT idx $ int32 (width1 + 1)
+            condBr cond vector1 vector2
+
+            -- vector 1
+            vector1 <- block `named` "vector1"
             vec' <- gep vec [int32 0, int32 1]
-            valptr <- gep vec' [int32 0, n]
-            val <- load valptr 1
-            ret val
+            vec'' <- load vec' 1
+            valptr <- gep vec'' [int32 0, n]
+            val1 <- load valptr 1
+            br end
+            endOfVector1 <- currentBlock
+
+            -- vector 2
+            vector2 <- block `named` "vector2"
+            vecptr2 <- gep vec [int32 0, int32 2]
+            idx1 <- BI.and n $ int32 (width1 - 1)
+            j <- BI.lshr n $ int32 bit1
+            idx2 <- BI.and j $ int32 (width1 - 1)
+            vec2 <- load vecptr2 1
+            valptr2 <- gep vec2 [int32 0, idx2, idx1]
+            val2 <- load valptr2 1
+
+            br end
+            endOfVector2 <- currentBlock
+
+            -- end
+            end <- block `named` "end"
+            result <- phi [(val1, endOfVector1), (val2, endOfVector2)]
+            ret result
         evalStateT (compileIRStmts ast) (Env globalEnv' env')
 
 llvmUnit :: Operand

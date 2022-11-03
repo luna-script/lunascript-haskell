@@ -131,7 +131,10 @@ execTinfStmts stmts varNames = evalStateT (mapM_ (\name -> do
     typeEnv .= M.insert name typ tenv) varNames >> tinfStmts stmts) (TEnv 0 initalTenv)
 
 initalTenv :: M.Map Text Typ
-initalTenv = M.fromList [("print_int", TFun TInt TUnit), ("get", TFun TInt (TFun (TVector TInt) TInt))]
+initalTenv = M.fromList [("print_int", TFun TInt TUnit),
+    ("get", TFun TInt (TFun (TVector TInt) TInt)),
+    ("foldl", foldlType),
+    ("length", TFun (TVector TInt) TInt)]
 
 newTVar :: StateT TEnv IO Typ
 newTVar = do
@@ -143,6 +146,7 @@ newTVar = do
 unify :: Typ -> Typ -> StateT TEnv IO ()
 unify TInt TInt = pure ()
 unify TBool TBool = pure ()
+unify TUnit TUnit = pure ()
 unify (TThunk t1) (TThunk t2) = unify t1 t2
 unify (TVector t1) (TVector t2) = unify t1 t2
 unify (TFun t11 t21) (TFun t12 t22) = do

@@ -3,7 +3,7 @@ assert() {
   expected="$1"
   input="$2"
 
-  echo "$input" | stack run | lli
+  echo "$input" | stack run | opt -O1 -S | lli
   actual="$?"
 
   if [ "$actual" = "$expected" ]; then
@@ -58,6 +58,13 @@ assert 13 "let func(a, b) = {
     a * c + b
 };
 let main = func(2, 3);"
+assert 4 "let main = if (2 < 3) { 
+    let a = 1;
+    a + 3
+} else { 
+    let a = 2;
+    a + 3
+};"
 assert 4 "let succ(n) = n + 1;
 let double(f, n) = f(f(n));
 let main = double(succ, 2);"
@@ -71,6 +78,7 @@ assertStdOut 1 "let main = print_int(1);"
 assertStdOut -1 "let main = print_int(1-2);"
 assertStdOut -1 "let main = print_int(-1);"
 assertStdOut -3 "let main = print_int(-1 + -2);"
+assertStdOut 1 "let main = if (2<3) print_int(1) else print_int(2);"
 assert 3 "let main = -1 * -3;"
 assert 5 "let main = a; let a = 5;"
 assert 5 "let main = a(); let a() = 5;"
@@ -86,5 +94,9 @@ assert 6 "let a = [1, 2, 3];
 let main = a[0] + a[1] + a[2];"
 assert 35 "let a = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,35];
 let main = a[34]"
+assert 6 "let add(a, b) = a + b; let main = foldl(add, 0, [1, 2, 3]);"
+assert 6 "let add(a, b) = a + b;
+let a = [1, 2, 3];
+let main = foldl(add, 0, a);"
 
 echo OK

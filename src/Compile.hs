@@ -58,43 +58,38 @@ compileIRExpr (IRVector xs) = mdo
     let len = toInteger $ length xs
     cond <- icmp IP.SLT (int32 len) $ int32 (width1 + 1)
     xs' <- mapM compileIRExpr xs
+    structptr <- alloca (StructureType False [i32, ptr $ ArrayType 32 i32, ptr $ ArrayType 32 (ArrayType 32 i32)]) Nothing 1
+    idx <- gep structptr [int32 0, int32 0]
+    store idx 1 $ int32 len
     condBr cond vector1 vector2
 
     -- flat vector
     vector1 <- block `named` "vector1"
-    structptr1 <- alloca (StructureType False [i32, ptr $ ArrayType 32 i32, ptr $ ArrayType 32 (ArrayType 32 i32)]) Nothing 1
-    idx1 <- gep structptr1 [int32 0, int32 0]
-    store idx1 0 $ int32 len
     vecptr1 <- alloca (ArrayType 32 i32) Nothing 1
-    structvec1 <- gep structptr1 [int32 0, int32 1]
+    structvec1 <- gep structptr [int32 0, int32 1]
     mapM_ (\(x, i) -> do
         ptr <- gep vecptr1 [int32 0, int32 i]
-        store ptr 0 x
+        store ptr 1 x
         ) $ zip xs' [0..]
-    store structvec1 0 vecptr1
+    store structvec1 1 vecptr1
     br end
-    endOfVector1 <- currentBlock
 
     -- 2-dimensional vector
     vector2 <- block `named` "vector2"
-    structptr2 <- alloca (StructureType False [i32, ptr $ ArrayType 32 i32, ptr $ ArrayType 32 (ArrayType 32 i32)]) Nothing 1
-    idx2 <- gep structptr2 [int32 0, int32 0]
-    store idx2 0 $ int32 len
-    structvec2 <- gep structptr2 [int32 0, int32 2]
+    structvec2 <- gep structptr [int32 0, int32 2]
     vecptr2 <- alloca (ArrayType 32 $ ArrayType 32 i32) Nothing 1
     mapM_ (\(x, i) -> do
         let i2 = i `div` width1
         let i1 = i `mod` width1
         ptr <- gep vecptr2 [int32 0, int32 i2, int32 i1]
-        store ptr 0 x
+        store ptr 1 x
         ) $ zip xs' [0..]
-    store structvec2 0 vecptr2
+    store structvec2 1 vecptr2
     br end
-    endOfVector2 <- currentBlock
 
     -- phi phase
     end <- block `named` "end"
-    phi [(structptr1, endOfVector1), (structptr2, endOfVector2)]
+    pure structptr
 compileIRExpr (IRIf condExpr thenExpr elseExpr) = mdo
     cond <- compileIRExpr condExpr
     condBr cond ifThen ifElse
@@ -179,42 +174,95 @@ compileToLLVM ast convertEnv =
     ppllvm $ buildModule "main" $ do
         printf <- externVarArgs "printf" [ptr i8] i32
         formatint <- globalStringPtr "%d" "$$$formatint"
-        printInt <- function "print_int" [(i32, "n")] unitType $ \[n] -> do
+        function "print_int" [(i32, "n")] unitType $ \[n] -> do
             call printf [(ConstantOperand formatint, []), (n, [])]
             ret llvmUnit
-        function "get" [(i32, "n"), (vectorType i32, "vec")] i32 $ \[n, vec] -> mdo
-            idxptr <- gep vec [int32 0, int32 0]
-            idx <- load idxptr 1
-            cond <- icmp IP.SLT idx $ int32 (width1 + 1)
-            condBr cond vector1 vector2
-
-            -- vector 1
-            vector1 <- block `named` "vector1"
-            vec' <- gep vec [int32 0, int32 1]
-            vec'' <- load vec' 1
-            valptr <- gep vec'' [int32 0, n]
-            val1 <- load valptr 1
-            br end
-            endOfVector1 <- currentBlock
-
-            -- vector 2
-            vector2 <- block `named` "vector2"
-            vecptr2 <- gep vec [int32 0, int32 2]
-            idx1 <- BI.and n $ int32 (width1 - 1)
-            j <- BI.lshr n $ int32 bit1
-            idx2 <- BI.and j $ int32 (width1 - 1)
-            vec2 <- load vecptr2 1
-            valptr2 <- gep vec2 [int32 0, idx2, idx1]
-            val2 <- load valptr2 1
-
-            br end
-            endOfVector2 <- currentBlock
-
-            -- end
-            end <- block `named` "end"
-            result <- phi [(val1, endOfVector1), (val2, endOfVector2)]
-            ret result
+        getImpl
+        foldlImpl
+        lengthImpl
         evalStateT (compileIRStmts ast) (Env globalEnv' env')
+
+lengthImpl :: (MonadModuleBuilder m) => m Operand
+lengthImpl = function "length" [(vectorType i32, "vec")] i32 $ \[vec] -> do
+    idxptr <- gep vec [int32 0, int32 0]
+    idx <- load idxptr 1
+    ret idx
 
 llvmUnit :: Operand
 llvmUnit = ConstantOperand (Undef unitType)
+
+getImpl :: (MonadModuleBuilder m, MonadFix m) => m Operand
+getImpl = function "get" [(i32, "n"), (vectorType i32, "vec")] i32 $ \[n, vec] -> mdo
+    idxptr <- gep vec [int32 0, int32 0]
+    idx <- load idxptr 1
+    cond <- icmp IP.SLT idx $ int32 (width1 + 1)
+    condBr cond vector1 vector2
+
+    -- vector 1
+    vector1 <- block `named` "vector1"
+    vec' <- gep vec [int32 0, int32 1]
+    vec'' <- load vec' 1
+    valptr <- gep vec'' [int32 0, n]
+    val1 <- load valptr 1
+    br end
+    endOfVector1 <- currentBlock
+
+    -- vector 2
+    vector2 <- block `named` "vector2"
+    vecptr2 <- gep vec [int32 0, int32 2]
+    idx1 <- BI.and n $ int32 (width1 - 1)
+    j <- BI.lshr n $ int32 bit1
+    idx2 <- BI.and j $ int32 (width1 - 1)
+    vec2 <- load vecptr2 1
+    valptr2 <- gep vec2 [int32 0, idx2, idx1]
+    val2 <- load valptr2 1
+
+    br end
+    endOfVector2 <- currentBlock
+
+    -- end
+    end <- block `named` "end"
+    result <- phi [(val1, endOfVector1), (val2, endOfVector2)]
+    ret result
+
+foldlImpl :: (MonadModuleBuilder m, MonadFix m) => m Operand
+foldlImpl = function "foldl" [(convertTypPrimeTollvmType $ TFun' TInt' $ TFun' TInt' TInt', "f"), (i32, "init"), (vectorType i32, "vec")] i32 $ \[f, init, vec] -> mdo
+    idxptr <- gep vec [int32 0, int32 0]
+    idx <- load idxptr 1
+    idx1 <- BI.and idx $ int32 (width1 - 1)
+    j <- BI.lshr idx $ int32 bit1
+    idx2 <- BI.and j $ int32 (width1 - 1)
+    resultptr <- alloca i32 Nothing 1
+    store resultptr 1 init
+    cond <- icmp IP.SLT idx2 $ int32 1
+    condBr cond vector1 vector2
+
+    -- vector 1
+    vector1 <- block `named` "vector1"
+    vecptr1 <- gep vec [int32 0, int32 1]
+    vec1 <- load vecptr1 1
+    br vector1LoopStart
+    loopHeader <- currentBlock
+
+    vector1LoopStart <- block `named` "vector1LoopStart"
+    loopIdx1 <- phi [(int32 0, loopHeader), (succLoopIdx1, nextloop)]
+    vector1cond <- icmp IP.SLT loopIdx1 idx
+    condBr vector1cond vector1Exec end
+    vector1Exec <- block `named` "vector1Exec"
+    result1 <- load resultptr 1
+    vecvalptr <- gep vec1 [int32 0, loopIdx1]
+    vecval <- load vecvalptr 1
+    newResult1 <- call f [(result1, []), (vecval, [])]
+    store resultptr 1 newResult1
+
+    succLoopIdx1 <- add loopIdx1 $ int32 1
+    br vector1LoopStart
+    nextloop <- currentBlock
+
+    -- vector 2
+    vector2 <- block `named` "vector2"
+    br end
+
+    end <- block `named` "end"
+    result <- load resultptr 1
+    ret result

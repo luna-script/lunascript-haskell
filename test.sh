@@ -1,4 +1,5 @@
 #!/bin/bash
+result=true
 assert() {
   expected="$1"
   input="$2"
@@ -10,7 +11,7 @@ assert() {
     echo "$input => $actual"
   else
     echo "$input => $expected expected, but got $actual"
-    exit 1
+    result=false
   fi
 }
 
@@ -24,7 +25,7 @@ assertStdOut() {
     echo "$input => $actual"
   else
     echo "$input => $expected expected, but got $actual"
-    exit 1
+    result=false
   fi
 }
 
@@ -98,5 +99,30 @@ assert 6 "let add(a, b) = a + b; let main = foldl(add, 0, [1, 2, 3]);"
 assert 6 "let add(a, b) = a + b;
 let a = [1, 2, 3];
 let main = foldl(add, 0, a);"
+assert 3 "let lambda(acm, n) = acm + 1;
+let mylength(vec) = foldl(lambda, 0, vec);
+let main = mylength([1, 2, 3]);"
+assert 3 "let lambda(acm, n) = acm + 1;
+let mylength(vec) = foldl(lambda, 0, vec);
+let vec = [1, 2, 3];
+let main = mylength(vec);"
+assert 35 "let lambda(acm, n) = acm + 1;
+let mylength(vec) = foldl(lambda, 0, vec);
+let main = mylength([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]);"
+assert 35 "let lambda(acm, n) = acm + 1;
+let mylength(vec) = foldl(lambda, 0, vec);
+let vec = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
+let main = mylength(vec);"
+assert 35 "let add(acm, n) = acm + n;
+let sum(vec) = foldl(add, 0, vec);
+let main = sum([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]);"
+assert 35 "let add(acm, n) = acm + n;
+let sum(vec) = foldl(add, 0, vec);
+let vec = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
+let main = sum(vec);"
 
-echo OK
+# if [ "${result}" ]; then
+#     echo "OK"
+# else
+#     echo "Failed"
+# fi

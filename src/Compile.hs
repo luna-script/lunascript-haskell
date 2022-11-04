@@ -261,8 +261,42 @@ foldlImpl = function "foldl" [(convertTypPrimeTollvmType $ TFun' TInt' $ TFun' T
 
     -- vector 2
     vector2 <- block `named` "vector2"
-    br end
+    vecptr2 <- gep vec [int32 0, int32 2]
+    vec2 <- load vecptr2 1
+    br vector2LoopStart2
+    loopHeader2 <- currentBlock
 
+    vector2LoopStart2 <- block `named` "vector2LoopStart"
+    loopIdx22 <- phi [(int32 0, loopHeader2), (succLoopIdx22, nextloop22)]
+    vector2cond2 <- icmp IP.SLE loopIdx22 idx2
+    condBr vector2cond2 vector2LoopStart1 end
+    vector2loop2header <- currentBlock
+
+    vector2LoopStart1 <- block `named` "vector2LoopStart1"
+    loopIdx21 <- phi [(int32 0, vector2loop2header), (succLoopIdx21, nextloop21)]
+    vector2cond11 <- icmp IP.SLT loopIdx21 $ int32 width1
+    loopIdx22shift <- shl loopIdx22 $ int32 bit1
+    loopIdx2 <- add loopIdx22shift loopIdx21
+    vector2cond12 <- icmp IP.SLT loopIdx2 idx
+    vector2cond1 <- BI.and vector2cond11 vector2cond12
+    condBr vector2cond1 vector2Exec vector22outor
+    vector2Exec <- block `named` "vector2Exec"
+    result2 <- load resultptr 1
+    vecvalptr2 <- gep vec2 [int32 0, loopIdx22, loopIdx21]
+    vecval2 <- load vecvalptr2 1
+    newResult2 <- call f [(result2, []), (vecval2, [])]
+    store resultptr 1 newResult2
+
+    succLoopIdx21 <- add loopIdx21 $ int32 1
+    br vector2LoopStart1
+    nextloop21 <- currentBlock
+
+    vector22outor <- block `named` "vector2outor"
+    succLoopIdx22 <- add loopIdx22 $ int32 1
+    br vector2LoopStart2
+    nextloop22 <- currentBlock
+
+    -- end
     end <- block `named` "end"
     result <- load resultptr 1
     ret result

@@ -120,9 +120,3 @@ assert 35 "let add(acm, n) = acm + n;
 let sum(vec) = foldl(add, 0, vec);
 let vec = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
 let main = sum(vec);"
-
-# if [ "${result}" ]; then
-#     echo "OK"
-# else
-#     echo "Failed"
-# fi

@@ -4,13 +4,13 @@ assert() {
   expected="$1"
   input="$2"
 
-  echo "$input" | stack run | opt -O1 -S | lli
+  echo "$input" | stack run | lli
   actual="$?"
 
   if [ "$actual" = "$expected" ]; then
-    echo "$input => $actual"
+    echo -e "$input => \e[32m$actual\e[m"
   else
-    echo "$input => $expected expected, but got $actual"
+    echo -e "$input => \e[31m$expected expected, but got $actual\e[m"
     result=false
   fi
 }
@@ -22,9 +22,9 @@ assertStdOut() {
   actual=`echo "$input" | stack run | lli`
 
   if [ "$actual" = "$expected" ]; then
-    echo "$input => $actual"
+    echo -e "$input => \e[32m$actual\e[m"
   else
-    echo "$input => $expected expected, but got $actual"
+    echo -e "$input => \e[31m$expected expected, but got $actual\e[m"
     result=false
   fi
 }

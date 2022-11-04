@@ -3,10 +3,11 @@
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TemplateHaskell        #-}
 module TypInf where
 import           AST
-import           Control.Exception
+import           Control.Exception.Safe
 import           Control.Lens              hiding (op)
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State
@@ -35,6 +36,13 @@ tinfExpr :: Expr Parsed -> StateT TEnv IO (Typ, Expr Typed)
 tinfExpr (EInt n) = pure (TInt, EInt n)
 tinfExpr (EBool b) = pure (TBool, EBool b)
 tinfExpr EUnit = pure (TUnit, EUnit)
+tinfExpr (EVector []) = pure (TVector TInt, EVector [])
+tinfExpr (EVector xs) = do
+    list <- mapM tinfExpr xs
+    let es = fmap snd list
+    let (t:ts) = fmap fst list
+    mapM_ (unify t) ts
+    pure (TVector t, EVector es)
 tinfExpr (BinOp op e1 e2) | op `elem` ["+", "-", "*", "/"] = do
     (t1, e1') <- tinfExpr e1
     unify t1 TInt
@@ -123,7 +131,10 @@ execTinfStmts stmts varNames = evalStateT (mapM_ (\name -> do
     typeEnv .= M.insert name typ tenv) varNames >> tinfStmts stmts) (TEnv 0 initalTenv)
 
 initalTenv :: M.Map Text Typ
-initalTenv = M.fromList [("print_int", TFun TInt TUnit)]
+initalTenv = M.fromList [("print_int", TFun TInt TUnit),
+    ("get", TFun TInt (TFun (TVector TInt) TInt)),
+    ("foldl", foldlType),
+    ("length", TFun (TVector TInt) TInt)]
 
 newTVar :: StateT TEnv IO Typ
 newTVar = do
@@ -135,7 +146,9 @@ newTVar = do
 unify :: Typ -> Typ -> StateT TEnv IO ()
 unify TInt TInt = pure ()
 unify TBool TBool = pure ()
+unify TUnit TUnit = pure ()
 unify (TThunk t1) (TThunk t2) = unify t1 t2
+unify (TVector t1) (TVector t2) = unify t1 t2
 unify (TFun t11 t21) (TFun t12 t22) = do
     unify t11 t12
     unify t21 t22
@@ -171,6 +184,7 @@ occur :: Integer -> Typ -> StateT TEnv IO Bool
 occur _ TInt = pure False
 occur _ TBool = pure False
 occur _ TUnit = pure False
+occur n (TVector t) = occur n t
 occur n (TFun t1 t2) = (||) <$> occur n t1 <*> occur n t2
 occur n (TVar m r) = if n == m then pure True else do
     t <- liftIO $ readIORef r

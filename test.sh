@@ -1,4 +1,5 @@
 #!/bin/bash
+result=true
 assert() {
   expected="$1"
   input="$2"
@@ -7,10 +8,10 @@ assert() {
   actual="$?"
 
   if [ "$actual" = "$expected" ]; then
-    echo "$input => $actual"
+    echo -e "$input => \e[32m$actual\e[m"
   else
-    echo "$input => $expected expected, but got $actual"
-    exit 1
+    echo -e "$input => \e[31m$expected expected, but got $actual\e[m"
+    result=false
   fi
 }
 
@@ -21,10 +22,10 @@ assertStdOut() {
   actual=`echo "$input" | stack run | lli`
 
   if [ "$actual" = "$expected" ]; then
-    echo "$input => $actual"
+    echo -e "$input => \e[32m$actual\e[m"
   else
-    echo "$input => $expected expected, but got $actual"
-    exit 1
+    echo -e "$input => \e[31m$expected expected, but got $actual\e[m"
+    result=false
   fi
 }
 
@@ -58,6 +59,13 @@ assert 13 "let func(a, b) = {
     a * c + b
 };
 let main = func(2, 3);"
+assert 4 "let main = if (2 < 3) { 
+    let a = 1;
+    a + 3
+} else { 
+    let a = 2;
+    a + 3
+};"
 assert 4 "let succ(n) = n + 1;
 let double(f, n) = f(f(n));
 let main = double(succ, 2);"
@@ -71,6 +79,7 @@ assertStdOut 1 "let main = print_int(1);"
 assertStdOut -1 "let main = print_int(1-2);"
 assertStdOut -1 "let main = print_int(-1);"
 assertStdOut -3 "let main = print_int(-1 + -2);"
+assertStdOut 1 "let main = if (2<3) print_int(1) else print_int(2);"
 assert 3 "let main = -1 * -3;"
 assert 5 "let main = a; let a = 5;"
 assert 5 "let main = a(); let a() = 5;"
@@ -78,5 +87,36 @@ assert 5 "let main = add(2, 3); let add(a, b) = a + b;"
 assert 1 "let main = isOdd(3);
 let isOdd(n) = if (n==0) False else isEven(n - 1);
 let isEven(n) = if (n==0) True else isOdd(n - 1);"
-
-echo OK
+assert 6 "let main = {
+    let a = [1, 2, 3];
+    a[0] + a[1] + a[2]
+};"
+assert 6 "let a = [1, 2, 3];
+let main = a[0] + a[1] + a[2];"
+assert 35 "let a = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,35];
+let main = a[34]"
+assert 6 "let add(a, b) = a + b; let main = foldl(add, 0, [1, 2, 3]);"
+assert 6 "let add(a, b) = a + b;
+let a = [1, 2, 3];
+let main = foldl(add, 0, a);"
+assert 3 "let lambda(acm, n) = acm + 1;
+let mylength(vec) = foldl(lambda, 0, vec);
+let main = mylength([1, 2, 3]);"
+assert 3 "let lambda(acm, n) = acm + 1;
+let mylength(vec) = foldl(lambda, 0, vec);
+let vec = [1, 2, 3];
+let main = mylength(vec);"
+assert 35 "let lambda(acm, n) = acm + 1;
+let mylength(vec) = foldl(lambda, 0, vec);
+let main = mylength([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]);"
+assert 35 "let lambda(acm, n) = acm + 1;
+let mylength(vec) = foldl(lambda, 0, vec);
+let vec = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
+let main = mylength(vec);"
+assert 35 "let add(acm, n) = acm + n;
+let sum(vec) = foldl(add, 0, vec);
+let main = sum([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]);"
+assert 35 "let add(acm, n) = acm + n;
+let sum(vec) = foldl(add, 0, vec);
+let vec = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
+let main = sum(vec);"

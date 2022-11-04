@@ -38,6 +38,7 @@ data IRExpr m where
   IRInt :: Integer -> IRExpr m
   IRBool :: Bool -> IRExpr m
   IRUnit :: IRExpr m
+  IRVector :: [IRExpr m] -> IRExpr m
   IROp :: (MonadIRBuilder m) => (Operand -> Operand -> m Operand) -> IRExpr m -> IRExpr m -> IRExpr m
   IRIf :: IRExpr m -> IRExpr m -> IRExpr m -> IRExpr m
   IRVar :: P.ShortByteString -> IRExpr m
@@ -52,6 +53,7 @@ convertExprToIRExpr :: (MonadIRBuilder m) => Expr SimpleTyped -> StateT ConvertE
 convertExprToIRExpr (EInt n) = pure $ IRInt n
 convertExprToIRExpr (EBool b) = pure $ IRBool b
 convertExprToIRExpr EUnit = pure IRUnit
+convertExprToIRExpr (EVector xs) = IRVector <$> mapM convertExprToIRExpr xs
 convertExprToIRExpr (BinOp op lh rh) = do
     lh' <- convertExprToIRExpr lh
     rh' <- convertExprToIRExpr rh
@@ -138,7 +140,8 @@ execConvertStmtsToIRStmts :: (MonadIRBuilder m) => [Stmt SimpleTyped] -> ([IRStm
 execConvertStmtsToIRStmts stmts = runIdentity $ runStateT (convertStmtsToIRStmts stmts) (ConvertEnv M.empty initialEnv)
 
 initialEnv :: Map P.ShortByteString Type
-initialEnv = M.fromList [("print_int", convertTypPrimeTollvmType $ TFun' TInt' TUnit')]
+initialEnv = M.fromList [("print_int", convertTypPrimeTollvmType $ TFun' TInt' TUnit'),
+    ("get", convertTypPrimeTollvmType $ TFun' TInt' (TFun' (TVector' TInt') TInt')),
+    ("foldl", foldlLlvmType),
+    ("length", convertTypPrimeTollvmType $ TFun' (TVector' TInt') TInt')]
 
-unitType :: Type
-unitType = StructureType False []

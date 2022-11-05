@@ -107,7 +107,7 @@ compileIRExpr (IRVar name) = do
         Just x  -> pure x
         Nothing -> case M.lookup name constantEnv of
             Just f  -> call f []
-            Nothing -> error $ "variable " ++ toString name ++ "is undefined"
+            Nothing -> error $ "variable " ++ toString name ++ " is undefined"
 compileIRExpr (IRExecThunk e) = do
     e' <- compileIRExpr e
     call e' []

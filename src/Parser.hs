@@ -149,10 +149,9 @@ block = do
     where
         blockstmt :: Parser (BlockStmt Parsed)
         blockstmt = (do
-            symbol "let "
-            ident <- identifier
-            symbol "="
-            BLet (ParsedVar ident) <$> expr)
+            (TopLevelLet var e) <- stmt
+            pure $ BLet var e
+            )
             <|> BExprStmt <$> expr
 lambda :: Parser (Expr Parsed)
 lambda = do

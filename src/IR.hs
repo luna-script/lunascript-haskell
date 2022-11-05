@@ -25,7 +25,9 @@ import           TypInf                     hiding (TEnv)
 
 data ConvertEnv = ConvertEnv {
         _convertEnvGlobalConstant :: M.Map P.ShortByteString AST.Type,
-        _convertEnvEnv            :: M.Map P.ShortByteString AST.Type
+        _convertEnvEnv            :: M.Map P.ShortByteString AST.Type,
+        _convertEnvUnusedNum      :: Int,
+        _convertEnvGenerateList   :: [Stmt SimpleTyped]
     }
 
 makeFields ''ConvertEnv
@@ -48,6 +50,12 @@ data IRExpr m where
 
 data IRBlockStmt m = IRBExprStmt (IRExpr m)
     | IRBLet P.ShortByteString (IRExpr m)
+
+newLambdaName :: StateT ConvertEnv Identity Text
+newLambdaName = do
+    n <- use unusedNum
+    unusedNum .= n + 1
+    pure $ "$$lambda_" <> toTextStrict (show n)
 
 convertExprToIRExpr :: (MonadIRBuilder m) => Expr SimpleTyped -> StateT ConvertEnv Identity (IRExpr m)
 convertExprToIRExpr (EInt n) = pure $ IRInt n
@@ -82,7 +90,13 @@ convertExprToIRExpr (FunApp e1 e2) = do
         separate e = (e, [])
 convertExprToIRExpr (Var (SimpleTypedVar _ name)) = pure $ IRVar $ toShortByteString name
 convertExprToIRExpr (ExecThunk e) = IRExecThunk <$> convertExprToIRExpr e
-convertExprToIRExpr (Fun _ _) = error "unimplemented"
+convertExprToIRExpr e@(Fun _ _) = do
+    genList <- use generateList
+    name <- newLambdaName
+    let t = typeOf e
+    let fun = TopLevelLet (SimpleTypedVar t name) e
+    generateList .= fun:genList
+    pure $ IRVar $ toShortByteString name
 convertExprToIRExpr (EThunk _) = error "unimplemented"
 convertExprToIRExpr (EBlock xs x) = do
     xs' <- mapM convertBlockStmtToIRBlockStmt xs
@@ -134,10 +148,14 @@ convertStmtToIRStmt (TopLevelLet (SimpleTypedVar t var) e) = do
     pure $ TopLevelConst name llvmtype e'
 
 convertStmtsToIRStmts :: (MonadIRBuilder m) => [Stmt SimpleTyped] -> StateT ConvertEnv Identity [IRStmt m]
-convertStmtsToIRStmts = mapM convertStmtToIRStmt
+convertStmtsToIRStmts stmts = do
+    stmt <- mapM convertStmtToIRStmt stmts
+    genList <- use generateList
+    newStmt <- mapM convertStmtToIRStmt genList
+    pure $ stmt ++ newStmt
 
 execConvertStmtsToIRStmts :: (MonadIRBuilder m) => [Stmt SimpleTyped] -> ([IRStmt m], ConvertEnv)
-execConvertStmtsToIRStmts stmts = runIdentity $ runStateT (convertStmtsToIRStmts stmts) (ConvertEnv M.empty initialEnv)
+execConvertStmtsToIRStmts stmts = runIdentity $ runStateT (convertStmtsToIRStmts stmts) (ConvertEnv M.empty initialEnv 0 [])
 
 initialEnv :: Map P.ShortByteString Type
 initialEnv = M.fromList [("print_int", convertTypPrimeTollvmType $ TFun' TInt' TUnit'),

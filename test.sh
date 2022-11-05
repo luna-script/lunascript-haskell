@@ -120,3 +120,8 @@ assert 35 "let add(acm, n) = acm + n;
 let sum(vec) = foldl(add, 0, vec);
 let vec = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
 let main = sum(vec);"
+assert 6 "let main = foldl(fn a, b -> a + b, 0, [1, 2, 3]);"
+assert 6 "let main = { 
+    let add(a, b) = a + b;
+    foldl(add, 0, [1, 2, 3])
+};"

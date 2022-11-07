@@ -58,33 +58,39 @@ compileIRExpr (IRVector xs) = mdo
     let len = toInteger $ length xs
     cond <- icmp IP.SLT (int32 len) $ int32 (width1 + 1)
     xs' <- mapM compileIRExpr xs
-    structptr <- alloca (StructureType False [i32, ArrayType 32 i32, ArrayType 32 (ArrayType 32 i32)]) Nothing 1
-    idx <- gep structptr [int32 0, int32 0]
-    store idx 1 $ int32 len
     condBr cond vector1 vector2
 
     -- flat vector
     vector1 <- block `named` "vector1"
-    vecptr1 <- gep structptr [int32 0, int32 1]
+    structptr1 <- alloca (rawVector1Type i32)  Nothing 1
+    vecptr1 <- gep structptr1 [int32 0, int32 1]
     mapM_ (\(x, i) -> do
         ptr <- gep vecptr1 [int32 0, int32 i]
         store ptr 1 x
         ) $ zip xs' [0..]
+    newStructptr1 <- bitcast structptr1 $ vectorType i32
     br end
+    vector1block <- currentBlock
 
     -- 2-dimensional vector
     vector2 <- block `named` "vector2"
-    vecptr2 <- gep structptr [int32 0, int32 2]
+    structptr2 <- alloca (rawVector2Type i32) Nothing 1
+    vecptr2 <- gep structptr2 [int32 0, int32 1]
     mapM_ (\(x, i) -> do
         let i2 = i `div` width1
         let i1 = i `mod` width1
         ptr <- gep vecptr2 [int32 0, int32 i2, int32 i1]
         store ptr 1 x
         ) $ zip xs' [0..]
+    newStructptr2 <- bitcast structptr2 $ vectorType i32
     br end
+    vector2block <- currentBlock
 
     -- phi phase
     end <- block `named` "end"
+    structptr <- phi [(newStructptr1, vector1block), (newStructptr2, vector2block)]
+    idx <- gep structptr [int32 0, int32 0]
+    store idx 1 $ int32 len
     pure structptr
 compileIRExpr (IRIf condExpr thenExpr elseExpr) = mdo
     cond <- compileIRExpr condExpr
@@ -196,19 +202,21 @@ getImpl = function "get" [(i32, "n"), (vectorType i32, "vec")] i32 $ \[n, vec] -
 
     -- vector 1
     vector1 <- block `named` "vector1"
-    vec'' <- gep vec [int32 0, int32 1]
-    valptr <- gep vec'' [int32 0, n]
+    vec1 <- bitcast vec $ vector1Type i32
+    vec1' <- gep vec1 [int32 0, int32 1]
+    valptr <- gep vec1' [int32 0, n]
     val1 <- load valptr 1
     br end
     endOfVector1 <- currentBlock
 
     -- vector 2
     vector2 <- block `named` "vector2"
-    vec2 <- gep vec [int32 0, int32 2]
+    vec2 <- bitcast vec $ vector2Type i32
+    vec2' <- gep vec2 [int32 0, int32 1]
     idx1 <- BI.and n $ int32 (width1 - 1)
     j <- BI.lshr n $ int32 bit1
     idx2 <- BI.and j $ int32 (width1 - 1)
-    valptr2 <- gep vec2 [int32 0, idx2, idx1]
+    valptr2 <- gep vec2' [int32 0, idx2, idx1]
     val2 <- load valptr2 1
 
     br end
@@ -233,7 +241,8 @@ foldlImpl = function "foldl" [(convertTypPrimeTollvmType $ TFun' TInt' $ TFun' T
 
     -- vector 1
     vector1 <- block `named` "vector1"
-    vec1 <- gep vec [int32 0, int32 1]
+    castedVec1 <- bitcast vec $ vector1Type i32
+    vec1 <- gep castedVec1 [int32 0, int32 1]
     br vector1LoopStart
     loopHeader <- currentBlock
 
@@ -254,7 +263,8 @@ foldlImpl = function "foldl" [(convertTypPrimeTollvmType $ TFun' TInt' $ TFun' T
 
     -- vector 2
     vector2 <- block `named` "vector2"
-    vec2 <- gep vec [int32 0, int32 2]
+    castedVec2 <- bitcast vec $ vector2Type i32
+    vec2 <- gep castedVec2 [int32 0, int32 1]
     br vector2LoopStart2
     loopHeader2 <- currentBlock
 

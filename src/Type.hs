@@ -80,7 +80,22 @@ unitType :: Type
 unitType = StructureType False []
 
 vectorType :: Type -> Type
-vectorType t = ptr (StructureType False [i32, ArrayType 32 t, ArrayType 32 (ArrayType 32 t)])
+vectorType t = ptr (rawVectorType t)
+
+rawVectorType :: Type -> Type
+rawVectorType _ = StructureType False [i32]
+
+vector1Type :: Type -> Type
+vector1Type = ptr . rawVector1Type
+
+rawVector1Type :: Type -> Type
+rawVector1Type t = StructureType False [i32, ArrayType 32 t]
+
+vector2Type :: Type -> Type
+vector2Type = ptr . rawVector2Type
+
+rawVector2Type :: Type -> Type
+rawVector2Type t = StructureType False [i32, ArrayType 32 $ ArrayType 32 t]
 
 foldlType :: Typ
 foldlType = TFun (TFun TInt (TFun TInt TInt)) $ TFun TInt $ TFun (TVector TInt) TInt

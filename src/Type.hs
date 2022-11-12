@@ -13,6 +13,7 @@ data Typ = TInt
     | TVector Typ
     | TVar Integer (IORef (Maybe Typ))
     | TThunk Typ
+    | QVar Integer
 
 
 data Typ' = TInt'
@@ -21,6 +22,7 @@ data Typ' = TInt'
     | TFun' Typ' Typ'
     | TVector' Typ'
     | TThunk' Typ'
+    | QVar' Integer
     deriving (Show, Eq)
 
 showTyp :: Typ -> IO String
@@ -42,11 +44,13 @@ showTyp (TVar n r) = do
 showTyp (TThunk t) = do
     showt <- showTyp t
     pure $ "TThunk (" ++ showt ++ ")"
+showTyp (QVar n) = pure $ "a" ++ show n
 
 convertTypToTyp' :: Typ -> IO Typ'
 convertTypToTyp' TInt = pure TInt'
 convertTypToTyp' TBool = pure TBool'
 convertTypToTyp' TUnit = pure TUnit'
+convertTypToTyp' (QVar n) = pure $ QVar' n
 convertTypToTyp' (TFun t1 t2) = do
     t1' <- convertTypToTyp' t1
     t2' <- convertTypToTyp' t2
@@ -65,7 +69,8 @@ convertTypPrimeTollvmType :: Typ' -> ASTType.Type
 convertTypPrimeTollvmType TInt'         = ASTType.i32
 convertTypPrimeTollvmType TBool'        = ASTType.i1
 convertTypPrimeTollvmType TUnit'        = unitType
-convertTypPrimeTollvmType (TVector' t)  = vectorType (convertTypPrimeTollvmType t)
+convertTypPrimeTollvmType (QVar' n)     = error $ "generic TVar " ++ show n
+convertTypPrimeTollvmType (TVector' t)  = vectorType
 convertTypPrimeTollvmType (TThunk' t)   = ASTType.PointerType (ASTType.FunctionType (convertTypPrimeTollvmType t) [] False) (AddrSpace 0)
 convertTypPrimeTollvmType (TFun' t1 t2) = let
     separateArgsAndResultType :: Typ' -> ([Typ'], Typ')
@@ -76,14 +81,21 @@ convertTypPrimeTollvmType (TFun' t1 t2) = let
     (args, result) = separateArgsAndResultType t2
     in ASTType.PointerType (ASTType.FunctionType (convertTypPrimeTollvmType result) (fmap convertTypPrimeTollvmType $ t1:args) False) (AddrSpace 0)
 
+
+separateFunType :: Typ' -> ([Typ'], Typ')
+separateFunType (TFun' arg t) = let
+    (args, result) = separateFunType t
+    in (arg:args, result)
+separateFunType t = ([], t)
+
 unitType :: Type
 unitType = StructureType False []
 
-vectorType :: Type -> Type
-vectorType t = ptr (rawVectorType t)
+vectorType :: Type
+vectorType = ptr rawVectorType
 
-rawVectorType :: Type -> Type
-rawVectorType _ = StructureType False [i32]
+rawVectorType :: Type
+rawVectorType = StructureType False [i32]
 
 vector1Type :: Type -> Type
 vector1Type = ptr . rawVector1Type
@@ -98,7 +110,7 @@ rawVector2Type :: Type -> Type
 rawVector2Type t = StructureType False [i32, ArrayType 32 $ ArrayType 32 t]
 
 foldlType :: Typ
-foldlType = TFun (TFun TInt (TFun TInt TInt)) $ TFun TInt $ TFun (TVector TInt) TInt
+foldlType = TFun (TFun (QVar 1) (TFun (QVar 0) $ QVar 1)) $ TFun (QVar 1) $ TFun (TVector $ QVar 0) $ QVar 1
 
 foldlLlvmType :: Type
 foldlLlvmType = convertTypPrimeTollvmType $ TFun' (TFun' TInt' $ TFun' TInt' TInt') $ TFun' TInt' $ TFun' (TVector' TInt') TInt'

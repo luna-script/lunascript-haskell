@@ -11,6 +11,7 @@ import           Control.Monad.Reader
 import           Control.Monad.State        (StateT (runStateT))
 import           Data.Functor.Identity      (Identity (..))
 import           Data.Map                   as M
+import qualified Data.Set                   as S
 import           Data.String.Transform
 import           Data.Text
 import           LLVM.AST                   (Operand)
@@ -23,11 +24,14 @@ import qualified LLVM.Prelude               as P
 import           Type
 import           TypInf                     hiding (TEnv)
 
+type PolymorphicFunType = Map P.ShortByteString (Map P.ShortByteString ([AST.Type], AST.Type))
+
 data ConvertEnv = ConvertEnv {
         _convertEnvGlobalConstant :: M.Map P.ShortByteString AST.Type,
         _convertEnvEnv            :: M.Map P.ShortByteString AST.Type,
         _convertEnvUnusedNum      :: Int,
-        _convertEnvGenerateList   :: [Stmt SimpleTyped]
+        _convertEnvGenerateList   :: [Stmt SimpleTyped],
+        _convertEnvPolymorphicFun :: PolymorphicFunType
     }
 
 makeFields ''ConvertEnv
@@ -40,7 +44,7 @@ data IRExpr m where
   IRInt :: Integer -> IRExpr m
   IRBool :: Bool -> IRExpr m
   IRUnit :: IRExpr m
-  IRVector :: [IRExpr m] -> IRExpr m
+  IRVector :: AST.Type -> [IRExpr m] -> IRExpr m
   IROp :: (MonadIRBuilder m) => (Operand -> Operand -> m Operand) -> IRExpr m -> IRExpr m -> IRExpr m
   IRIf :: IRExpr m -> IRExpr m -> IRExpr m -> IRExpr m
   IRVar :: P.ShortByteString -> IRExpr m
@@ -61,7 +65,7 @@ convertExprToIRExpr :: (MonadIRBuilder m) => Expr SimpleTyped -> StateT ConvertE
 convertExprToIRExpr (EInt n) = pure $ IRInt n
 convertExprToIRExpr (EBool b) = pure $ IRBool b
 convertExprToIRExpr EUnit = pure IRUnit
-convertExprToIRExpr (EVector xs) = IRVector <$> mapM convertExprToIRExpr xs
+convertExprToIRExpr (EVector (SimpleTypedVec t xs)) = IRVector (convertTypPrimeTollvmType t) <$> mapM convertExprToIRExpr xs
 convertExprToIRExpr (BinOp op lh rh) = do
     lh' <- convertExprToIRExpr lh
     rh' <- convertExprToIRExpr rh
@@ -88,7 +92,25 @@ convertExprToIRExpr (FunApp e1 e2) = do
             (fun, args) = separate e1
             in (fun, args ++ [e2])
         separate e = (e, [])
-convertExprToIRExpr (Var (SimpleTypedVar _ name)) = pure $ IRVar $ toShortByteString name
+convertExprToIRExpr (Var (SimpleTypedVar t name)) = do
+    pFun <- use polymorphicFun
+    let sName = toShortByteString name
+    case M.lookup sName pFun of
+        Nothing -> pure $ IRVar sName
+        Just fn -> do
+            let stringT = toShortByteString $ show t
+            let spName = sName <> "::" <> stringT
+            case M.lookup stringT fn of
+                Just _ -> pure $ IRVar spName
+                Nothing -> do
+                    let llvmT = convertTypPrimeTollvmType t
+                    env' <- use env
+                    env .= M.insert spName llvmT env'
+                    let (args, resultT) = separateFunType t
+                    let fn' = M.insert spName (fmap convertTypPrimeTollvmType args, convertTypPrimeTollvmType resultT) fn
+                    polymorphicFun .= M.insert sName fn' pFun
+                    pure $ IRVar spName
+
 convertExprToIRExpr (ExecThunk e) = IRExecThunk <$> convertExprToIRExpr e
 convertExprToIRExpr e@(Fun _ _) = do
     genList <- use generateList
@@ -127,7 +149,7 @@ convertStmtToIRStmt (TopLevelLet (SimpleTypedVar t var) (Fun (SimpleTypedVar _ n
     env .= M.insert (toShortByteString var) (convertTypPrimeTollvmType t) env'
     let (args, body) = separate e
     e' <- convertExprToIRExpr body
-    let (argsType, resultType) = separateType t
+    let (argsType, resultType) = separateFunType t
     pure $ TopLevelFunDef (toShortByteString var) (Prelude.zip (fmap convertTypPrimeTollvmType argsType) (toShortByteString <$> name:args)) (convertTypPrimeTollvmType resultType) e'
     where
         separate :: Expr SimpleTyped -> ([Text], Expr SimpleTyped)
@@ -135,10 +157,6 @@ convertStmtToIRStmt (TopLevelLet (SimpleTypedVar t var) (Fun (SimpleTypedVar _ n
             (args, body) = separate e
             in (name:args, body)
         separate e = ([], e)
-        separateType (TFun' arg t) = let
-            (args, result) = separateType t
-            in (arg:args, result)
-        separateType t = ([], t)
 convertStmtToIRStmt (TopLevelLet (SimpleTypedVar t var) e) = do
     globalConstant' <- use globalConstant
     let name = toShortByteString var
@@ -155,11 +173,13 @@ convertStmtsToIRStmts stmts = do
     pure $ stmt ++ newStmt
 
 execConvertStmtsToIRStmts :: (MonadIRBuilder m) => [Stmt SimpleTyped] -> ([IRStmt m], ConvertEnv)
-execConvertStmtsToIRStmts stmts = runIdentity $ runStateT (convertStmtsToIRStmts stmts) (ConvertEnv M.empty initialEnv 0 [])
+execConvertStmtsToIRStmts stmts = runIdentity $ runStateT (convertStmtsToIRStmts stmts) (ConvertEnv M.empty initialEnv 0 [] initialPolymorphicFun)
 
 initialEnv :: Map P.ShortByteString Type
-initialEnv = M.fromList [("print_int", convertTypPrimeTollvmType $ TFun' TInt' TUnit'),
-    ("get", convertTypPrimeTollvmType $ TFun' TInt' (TFun' (TVector' TInt') TInt')),
-    ("foldl", foldlLlvmType),
-    ("length", convertTypPrimeTollvmType $ TFun' (TVector' TInt') TInt')]
+initialEnv = M.fromList [("print_int", convertTypPrimeTollvmType $ TFun' TInt' TUnit')]
+    -- ("get", convertTypPrimeTollvmType $ TFun' TInt' (TFun' (TVector' TInt') TInt')),
+    -- ("foldl", foldlLlvmType),
+    -- ("length", convertTypPrimeTollvmType $ TFun' (TVector' TInt') TInt')]
 
+initialPolymorphicFun :: PolymorphicFunType
+initialPolymorphicFun = M.fromList [("get", M.empty), ("foldl", M.empty), ("length", M.empty)]

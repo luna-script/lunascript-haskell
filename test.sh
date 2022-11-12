@@ -125,3 +125,14 @@ assert 6 "let main = {
     let add(a, b) = a + b;
     foldl(add, 0, [1, 2, 3])
 };"
+assert 0 "let main = [True, False][1];"
+assert 3 "let main = [[3, 0], [0, 1]][0][0];"
+assert 3 "let main = [[3, 0], [0, 1]][0, 0];"
+assert 2 "let a = [[1, 0], [0, 1]];
+let main = a[0, 0] + a[1, 1];"
+assert 2 "let main = length([[1, 0], [0, 1]]);"
+assert 2 "let mylength(vec) = foldl(fn acm, n -> acm + 1, 0, vec);
+let main = mylength([True, False]);"
+assert 10 "let a = [[1, 2], [3, 4]]; 
+let sum(vec) = foldl(fn a, b -> a + b, 0, vec);
+let main = sum(a[0])+sum(a[1]);"

@@ -10,6 +10,7 @@ import           AST
 import           Control.Exception.Safe
 import           Control.Lens              hiding (op)
 import           Control.Monad.IO.Class
+import           Control.Monad.State       (lift)
 import           Control.Monad.Trans.State
 import           Data.IORef
 import qualified Data.Map                  as M
@@ -36,13 +37,15 @@ tinfExpr :: Expr Parsed -> StateT TEnv IO (Typ, Expr Typed)
 tinfExpr (EInt n) = pure (TInt, EInt n)
 tinfExpr (EBool b) = pure (TBool, EBool b)
 tinfExpr EUnit = pure (TUnit, EUnit)
-tinfExpr (EVector []) = pure (TVector TInt, EVector [])
-tinfExpr (EVector xs) = do
+tinfExpr (EVector (ParsedVec [])) = do
+    t <- newTVar
+    pure (TVector t, EVector $ TypedVec t [])
+tinfExpr (EVector (ParsedVec xs)) = do
     list <- mapM tinfExpr xs
     let es = fmap snd list
     let (t:ts) = fmap fst list
     mapM_ (unify t) ts
-    pure (TVector t, EVector es)
+    pure (TVector t, EVector $ TypedVec t es)
 tinfExpr (BinOp op e1 e2) | op `elem` ["+", "-", "*", "/"] = do
     (t1, e1') <- tinfExpr e1
     unify t1 TInt
@@ -59,7 +62,10 @@ tinfExpr BinOp {} = error "unimpremented"
 tinfExpr (Var (ParsedVar x)) = do
     tenv <- use typeEnv
     case M.lookup x tenv of
-        Just t  -> pure (t, Var (TypedVar t x))
+        Just t  -> do
+            t' <- instantiate t
+            _ <- liftIO $ showTyp t'
+            pure (t', Var (TypedVar t' x))
         Nothing -> throw $ VariableNotFound x
 tinfExpr (Fun (ParsedVar x) e) = do
     t1 <- newTVar
@@ -132,9 +138,9 @@ execTinfStmts stmts varNames = evalStateT (mapM_ (\name -> do
 
 initalTenv :: M.Map Text Typ
 initalTenv = M.fromList [("print_int", TFun TInt TUnit),
-    ("get", TFun TInt (TFun (TVector TInt) TInt)),
+    ("get", TFun TInt (TFun (TVector $ QVar 0) $ QVar 0)),
     ("foldl", foldlType),
-    ("length", TFun (TVector TInt) TInt)]
+    ("length", TFun (TVector $ QVar 0) TInt)]
 
 newTVar :: StateT TEnv IO Typ
 newTVar = do
@@ -142,6 +148,30 @@ newTVar = do
     t <- liftIO $ newIORef Nothing
     newVarNum .= n + 1
     pure $ TVar (n + 1) t
+
+instantiate :: Typ -> StateT TEnv IO Typ
+instantiate t = evalStateT (go t) M.empty
+    where
+        go :: Typ -> StateT (M.Map Integer Typ) (StateT TEnv IO) Typ
+        go TInt = pure TInt
+        go TBool = pure TBool
+        go TUnit = pure TUnit
+        go (TThunk t) = TThunk <$> go t
+        go (TFun t1 t2) = TFun <$> go t1 <*> go t2
+        go (TVector t) = TVector <$> go t
+        go ty@(TVar _ r) = do
+            t <- liftIO $ readIORef r
+            case t of
+                Just t' -> go t'
+                Nothing -> pure ty
+        go (QVar n) = do
+            m <- get
+            case M.lookup n m of
+                Just t -> pure t
+                Nothing -> do
+                    t <- lift newTVar
+                    put $ M.insert n t m
+                    pure t
 
 unify :: Typ -> Typ -> StateT TEnv IO ()
 unify TInt TInt = pure ()
@@ -192,3 +222,5 @@ occur n (TVar m r) = if n == m then pure True else do
         Nothing -> pure False
         Just t' -> occur n t'
 occur n (TThunk t) = occur n t
+occur _ (QVar _) = pure False
+

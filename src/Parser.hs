@@ -91,13 +91,13 @@ factor =
 vector :: Parser (Expr Parsed)
 vector = do
     e <- between (symbol "[") (symbol "]") $ expr `sepBy` symbol ","
-    pure $ EVector e
+    pure $ EVector $ ParsedVec e
 
 vectorGet :: Parser (Expr Parsed)
 vectorGet = do
     e <- appliedExpr
-    index' <- between (symbol "[") (symbol "]") expr
-    pure $ FunApp (FunApp (Var $ ParsedVar "get") index') e
+    index' <- some $ between (symbol "[") (symbol "]") (expr `sepBy1` symbol ",")
+    pure $ foldl (\acm e' -> FunApp (FunApp (Var $ ParsedVar "get") e') acm) e $ concat index'
 
 exprIf :: Parser (Expr Parsed)
 exprIf = do

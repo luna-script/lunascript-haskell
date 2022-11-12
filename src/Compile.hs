@@ -54,7 +54,7 @@ compileIRExpr (IROp op e1 e2) = do
     e1' <- compileIRExpr e1
     e2' <- compileIRExpr e2
     op e1' e2'
-compileIRExpr (IRVector xs) = mdo
+compileIRExpr (IRVector t xs) = mdo
     let len = toInteger $ length xs
     cond <- icmp IP.SLT (int32 len) $ int32 (width1 + 1)
     xs' <- mapM compileIRExpr xs
@@ -62,19 +62,19 @@ compileIRExpr (IRVector xs) = mdo
 
     -- flat vector
     vector1 <- block `named` "vector1"
-    structptr1 <- alloca (rawVector1Type i32)  Nothing 1
+    structptr1 <- alloca (rawVector1Type t)  Nothing 1
     vecptr1 <- gep structptr1 [int32 0, int32 1]
     mapM_ (\(x, i) -> do
         ptr <- gep vecptr1 [int32 0, int32 i]
         store ptr 1 x
         ) $ zip xs' [0..]
-    newStructptr1 <- bitcast structptr1 $ vectorType i32
+    newStructptr1 <- bitcast structptr1 vectorType
     br end
     vector1block <- currentBlock
 
     -- 2-dimensional vector
     vector2 <- block `named` "vector2"
-    structptr2 <- alloca (rawVector2Type i32) Nothing 1
+    structptr2 <- alloca (rawVector2Type t) Nothing 1
     vecptr2 <- gep structptr2 [int32 0, int32 1]
     mapM_ (\(x, i) -> do
         let i2 = i `div` width1
@@ -82,7 +82,7 @@ compileIRExpr (IRVector xs) = mdo
         ptr <- gep vecptr2 [int32 0, int32 i2, int32 i1]
         store ptr 1 x
         ) $ zip xs' [0..]
-    newStructptr2 <- bitcast structptr2 $ vectorType i32
+    newStructptr2 <- bitcast structptr2 vectorType
     br end
     vector2block <- currentBlock
 
@@ -172,6 +172,9 @@ compileToLLVM ast convertEnv =
             ref = ASTCons.GlobalReference t (Name name)
             in ConstantOperand ref)
         env' = M.mapWithKey toEnv (convertEnv^.env)
+        Just getPoly = fmap M.toList $ M.lookup "get" $ convertEnv^.polymorphicFun
+        Just foldlPoly = fmap M.toList $ M.lookup "foldl" $ convertEnv^.polymorphicFun
+        Just lengthPoly = fmap M.toList $ M.lookup "length" $ convertEnv^.polymorphicFun
     in
     ppllvm $ buildModule "main" $ do
         printf <- externVarArgs "printf" [ptr i8] i32
@@ -179,13 +182,15 @@ compileToLLVM ast convertEnv =
         function "print_int" [(i32, "n")] unitType $ \[n] -> do
             call printf [(ConstantOperand formatint, []), (n, [])]
             ret llvmUnit
-        getImpl
-        foldlImpl
-        lengthImpl
+        mapM_ getImpl getPoly
+        mapM_ foldlImpl foldlPoly
+        mapM_ lengthImpl lengthPoly
         evalStateT (compileIRStmts ast) (Env globalEnv' env')
 
-lengthImpl :: (MonadModuleBuilder m) => m Operand
-lengthImpl = function "length" [(vectorType i32, "vec")] i32 $ \[vec] -> do
+type PolyArg = (Pr.ShortByteString, ([ASTType.Type], ASTType.Type))
+
+lengthImpl :: (MonadModuleBuilder m) => PolyArg -> m Operand
+lengthImpl (name, (argst, resultt)) = function (Name name) (zip argst ["vec"]) resultt $ \[vec] -> do
     idxptr <- gep vec [int32 0, int32 0]
     idx <- load idxptr 1
     ret idx
@@ -193,8 +198,8 @@ lengthImpl = function "length" [(vectorType i32, "vec")] i32 $ \[vec] -> do
 llvmUnit :: Operand
 llvmUnit = ConstantOperand (Undef unitType)
 
-getImpl :: (MonadModuleBuilder m, MonadFix m) => m Operand
-getImpl = function "get" [(i32, "n"), (vectorType i32, "vec")] i32 $ \[n, vec] -> mdo
+getImpl :: (MonadModuleBuilder m, MonadFix m) => PolyArg -> m Operand
+getImpl (name, (argst, resultt)) = function (Name name) (zip argst ["n", "vec"]) resultt $ \[n, vec] -> mdo
     idxptr <- gep vec [int32 0, int32 0]
     idx <- load idxptr 1
     cond <- icmp IP.SLT idx $ int32 (width1 + 1)
@@ -202,7 +207,7 @@ getImpl = function "get" [(i32, "n"), (vectorType i32, "vec")] i32 $ \[n, vec] -
 
     -- vector 1
     vector1 <- block `named` "vector1"
-    vec1 <- bitcast vec $ vector1Type i32
+    vec1 <- bitcast vec $ vector1Type resultt
     vec1' <- gep vec1 [int32 0, int32 1]
     valptr <- gep vec1' [int32 0, n]
     val1 <- load valptr 1
@@ -211,7 +216,7 @@ getImpl = function "get" [(i32, "n"), (vectorType i32, "vec")] i32 $ \[n, vec] -
 
     -- vector 2
     vector2 <- block `named` "vector2"
-    vec2 <- bitcast vec $ vector2Type i32
+    vec2 <- bitcast vec $ vector2Type resultt
     vec2' <- gep vec2 [int32 0, int32 1]
     idx1 <- BI.and n $ int32 (width1 - 1)
     j <- BI.lshr n $ int32 bit1
@@ -227,21 +232,21 @@ getImpl = function "get" [(i32, "n"), (vectorType i32, "vec")] i32 $ \[n, vec] -
     result <- phi [(val1, endOfVector1), (val2, endOfVector2)]
     ret result
 
-foldlImpl :: (MonadModuleBuilder m, MonadFix m) => m Operand
-foldlImpl = function "foldl" [(convertTypPrimeTollvmType $ TFun' TInt' $ TFun' TInt' TInt', "f"), (i32, "init"), (vectorType i32, "vec")] i32 $ \[f, init, vec] -> mdo
+foldlImpl :: (MonadModuleBuilder m, MonadFix m) => PolyArg -> m Operand
+foldlImpl (name, (argst, resultt)) = function (Name name) (zip argst ["f", "init", "vec"]) resultt $ \[f, init, vec] -> mdo
     idxptr <- gep vec [int32 0, int32 0]
     idx <- load idxptr 1
     idx1 <- BI.and idx $ int32 (width1 - 1)
     j <- BI.lshr idx $ int32 bit1
     idx2 <- BI.and j $ int32 (width1 - 1)
-    resultptr <- alloca i32 Nothing 1
+    resultptr <- alloca resultt Nothing 1
     store resultptr 1 init
     cond <- icmp IP.SLT idx2 $ int32 1
     condBr cond vector1 vector2
 
     -- vector 1
     vector1 <- block `named` "vector1"
-    castedVec1 <- bitcast vec $ vector1Type i32
+    castedVec1 <- bitcast vec $ vector1Type a
     vec1 <- gep castedVec1 [int32 0, int32 1]
     br vector1LoopStart
     loopHeader <- currentBlock
@@ -263,7 +268,7 @@ foldlImpl = function "foldl" [(convertTypPrimeTollvmType $ TFun' TInt' $ TFun' T
 
     -- vector 2
     vector2 <- block `named` "vector2"
-    castedVec2 <- bitcast vec $ vector2Type i32
+    castedVec2 <- bitcast vec $ vector2Type a
     vec2 <- gep castedVec2 [int32 0, int32 1]
     br vector2LoopStart2
     loopHeader2 <- currentBlock
@@ -302,3 +307,7 @@ foldlImpl = function "foldl" [(convertTypPrimeTollvmType $ TFun' TInt' $ TFun' T
     end <- block `named` "end"
     result <- load resultptr 1
     ret result
+
+    where
+        PointerType (FunctionType _ fargsList _) _ = head argst
+        a = fargsList !! 1

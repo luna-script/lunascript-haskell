@@ -136,3 +136,4 @@ let main = mylength([True, False]);"
 assert 10 "let a = [[1, 2], [3, 4]]; 
 let sum(vec) = foldl(fn a, b -> a + b, 0, vec);
 let main = sum(a[0])+sum(a[1]);"
+assert 5 "let get = 5; let main = get;"

@@ -1,5 +1,6 @@
 module Path where
 
+import           Alpha
 import           AST
 import           Compile
 import qualified Data.Text.Internal.Lazy
@@ -14,7 +15,8 @@ doAllPath str = do
     let (ast, varNames) = parseStmts str
     typedAst <- execTinfStmts ast varNames
     typedAst' <- mapM convertStmtTypedToSimpleTyped typedAst
-    let (irStmts, env) = execConvertStmtsToIRStmts typedAst'
+    let typedAst'' = alpha varNames typedAst'
+    let (irStmts, env) = execConvertStmtsToIRStmts typedAst''
     LIO.putStrLn $ compileToLLVM irStmts env
 
 showTypeCheck :: Data.Text.Internal.Lazy.Text -> IO ()

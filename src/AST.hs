@@ -4,7 +4,7 @@
 {-# LANGUAGE StarIsType            #-}
 {-# LANGUAGE TypeFamilies          #-}
 
-module AST where
+module AST (Expr(..), BlockStmt(..), Stmt(..), Parsed, Typed, SimpleTyped, XVar(..), XVec(..), TypeOf(typeOf), ToSimpleTyped(toSimpleTyped)) where
 
 import           Data.String.Transform (ToString (..))
 import           Data.Text             (Text)

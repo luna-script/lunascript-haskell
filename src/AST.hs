@@ -117,11 +117,11 @@ instance TypeOf (Expr SimpleTyped) where
   typeOf (EVector (SimpleTypedVec t _)) = TVector' t
 
 class ToSimpleTyped t where
-  type Result t
-  toSimpleTyped :: t -> Result t
+  type ToSimpleTypedResult t
+  toSimpleTyped :: t -> ToSimpleTypedResult t
 
 instance ToSimpleTyped (Expr Typed) where
-  type Result (Expr Typed) = IO (Expr SimpleTyped)
+  type ToSimpleTypedResult (Expr Typed) = IO (Expr SimpleTyped)
   toSimpleTyped (EInt n) = pure $ EInt n
   toSimpleTyped (EBool b) = pure $ EBool b
   toSimpleTyped EUnit = pure EUnit
@@ -130,7 +130,7 @@ instance ToSimpleTyped (Expr Typed) where
     e2' <- toSimpleTyped e2
     pure $ BinOp op e1' e2'
   toSimpleTyped (Var (TypedVar t name)) = do
-    t' <- convertTypToTyp' t
+    t' <- toTyp' t
     pure $ Var $ SimpleTypedVar t' name
   toSimpleTyped (EIf e1 e2 e3) = do
     e1' <- toSimpleTyped e1
@@ -139,9 +139,9 @@ instance ToSimpleTyped (Expr Typed) where
     pure $ EIf e1' e2' e3'
   toSimpleTyped (Fun (TypedVar t name) e) = do
     e' <- toSimpleTyped e
-    t' <- convertTypToTyp' t
+    t' <- toTyp' t
     pure $ Fun (SimpleTypedVar t' name) e'
-  toSimpleTyped (EVector (TypedVec t e)) = EVector <$> (SimpleTypedVec <$> convertTypToTyp' t <*> mapM toSimpleTyped e)
+  toSimpleTyped (EVector (TypedVec t e)) = EVector <$> (SimpleTypedVec <$> toTyp' t <*> mapM toSimpleTyped e)
   toSimpleTyped (FunApp e1 e2) = do
     e1' <- toSimpleTyped e1
     e2' <- toSimpleTyped e2
@@ -159,12 +159,12 @@ instance ToSimpleTyped (Expr Typed) where
         pure $ BExprStmt e'
       convertEStmt (BLet (TypedVar t name) e) = do
         e' <- toSimpleTyped e
-        t' <- convertTypToTyp' t
+        t' <- toTyp' t
         pure $ BLet (SimpleTypedVar t' name) e'
 
 instance ToSimpleTyped (Stmt Typed) where
-  type Result (Stmt Typed) = IO (Stmt SimpleTyped)
+  type ToSimpleTypedResult (Stmt Typed) = IO (Stmt SimpleTyped)
   toSimpleTyped (TopLevelLet (TypedVar t name) e) = do
     e' <- toSimpleTyped e
-    t' <- convertTypToTyp' t
+    t' <- toTyp' t
     pure $ TopLevelLet (SimpleTypedVar t' name) e'

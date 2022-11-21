@@ -11,16 +11,15 @@ import           TypInf
 
 doAllPath :: Data.Text.Internal.Lazy.Text -> IO ()
 doAllPath str = do
-    let (ast, varNames) = parseStmts str
-    typedAst <- execTinfStmts ast varNames
-    typedAst' <- mapM convertStmtTypedToSimpleTyped typedAst
-    let (irStmts, env) = execConvertStmtsToIRStmts typedAst'
-    LIO.putStrLn $ compileToLLVM irStmts env
+  let (ast, varNames) = parseStmts str
+  typedAst <- execTinfStmts ast varNames
+  typedAst' <- mapM toSimpleTyped typedAst
+  let (irStmts, env) = execConvertStmtsToIRStmts typedAst'
+  LIO.putStrLn $ compileToLLVM irStmts env
 
 showTypeCheck :: Data.Text.Internal.Lazy.Text -> IO ()
 showTypeCheck str = do
-    let (ast, varNames) = parseStmts str
-    typedAst <- execTinfStmts ast varNames
-    typedAst' <- mapM convertStmtTypedToSimpleTyped typedAst
-    print typedAst'
-
+  let (ast, varNames) = parseStmts str
+  typedAst <- execTinfStmts ast varNames
+  typedAst' <- mapM toSimpleTyped typedAst
+  print typedAst'

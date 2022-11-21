@@ -186,9 +186,5 @@ execConvertStmtsToIRStmts stmts = runIdentity $ runStateT (convertStmtsToIRStmts
 initialEnv :: Map P.ShortByteString Type
 initialEnv = M.fromList [("print_int", toLLVMType $ TFun' TInt' TUnit')]
 
--- ("get", convertTypPrimeTollvmType $ TFun' TInt' (TFun' (TVector' TInt') TInt')),
--- ("foldl", foldlLlvmType),
--- ("length", convertTypPrimeTollvmType $ TFun' (TVector' TInt') TInt')]
-
 initialPolymorphicFun :: PolymorphicFunType
 initialPolymorphicFun = M.fromList [("get", M.empty), ("foldl", M.empty), ("length", M.empty)]

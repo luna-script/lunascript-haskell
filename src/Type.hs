@@ -74,21 +74,23 @@ instance ToTyp' Typ where
       Nothing -> error "unspecialized tvar"
       Just t' -> toTyp' t'
 
-convertTypPrimeTollvmType :: Typ' -> ASTType.Type
-convertTypPrimeTollvmType TInt' = ASTType.i32
-convertTypPrimeTollvmType TBool' = ASTType.i1
-convertTypPrimeTollvmType TUnit' = unitType
-convertTypPrimeTollvmType (QVar' n) = error $ "generic TVar " ++ show n
-convertTypPrimeTollvmType (TVector' t) = vectorType
-convertTypPrimeTollvmType (TThunk' t) = ASTType.PointerType (ASTType.FunctionType (convertTypPrimeTollvmType t) [] False) (AddrSpace 0)
-convertTypPrimeTollvmType (TFun' t1 t2) =
-  let separateArgsAndResultType :: Typ' -> ([Typ'], Typ')
-      separateArgsAndResultType (TFun' t1_ t2_) =
-        let (args_, result_) = separateArgsAndResultType t2_
-         in (t1_ : args_, result_)
-      separateArgsAndResultType t = ([], t)
-      (args, result) = separateArgsAndResultType t2
-   in ASTType.PointerType (ASTType.FunctionType (convertTypPrimeTollvmType result) (fmap convertTypPrimeTollvmType $ t1 : args) False) (AddrSpace 0)
+class ToLLVMType t where
+    toLLVMType :: t -> ASTType.Type
+instance ToLLVMType Typ' where
+    toLLVMType TInt' = ASTType.i32
+    toLLVMType TBool' = ASTType.i1
+    toLLVMType TUnit' = unitType
+    toLLVMType (QVar' n) = error $ "generic TVar " ++ show n
+    toLLVMType (TVector' t) = vectorType
+    toLLVMType (TThunk' t) = ASTType.PointerType (ASTType.FunctionType (toLLVMType t) [] False) (AddrSpace 0)
+    toLLVMType (TFun' t1 t2) =
+      let separateArgsAndResultType :: Typ' -> ([Typ'], Typ')
+          separateArgsAndResultType (TFun' t1_ t2_) =
+            let (args_, result_) = separateArgsAndResultType t2_
+             in (t1_ : args_, result_)
+          separateArgsAndResultType t = ([], t)
+          (args, result) = separateArgsAndResultType t2
+       in ASTType.PointerType (ASTType.FunctionType (toLLVMType result) (fmap toLLVMType $ t1 : args) False) (AddrSpace 0)
 
 separateFunType :: Typ' -> ([Typ'], Typ')
 separateFunType (TFun' arg t) =
@@ -121,4 +123,4 @@ foldlType :: Typ
 foldlType = TFun (TFun (QVar 1) (TFun (QVar 0) $ QVar 1)) $ TFun (QVar 1) $ TFun (TVector $ QVar 0) $ QVar 1
 
 foldlLlvmType :: Type
-foldlLlvmType = convertTypPrimeTollvmType $ TFun' (TFun' TInt' $ TFun' TInt' TInt') $ TFun' TInt' $ TFun' (TVector' TInt') TInt'
+foldlLlvmType = toLLVMType $ TFun' (TFun' TInt' $ TFun' TInt' TInt') $ TFun' TInt' $ TFun' (TVector' TInt') TInt'

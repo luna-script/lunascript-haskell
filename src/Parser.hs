@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TemplateHaskell        #-}
-module Parser where
+module Parser (Parser, sc, lexeme, symbol, identifier, keywords, ops, expr, parens, factor, vector, vectorGet, exprIf, app, appliedExpr, program, topLevelFunDef, block, lambda, topLevelLet, parseExpr, parseStmts) where
 
 import           AST
 import           Control.Lens

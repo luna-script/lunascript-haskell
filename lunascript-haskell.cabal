@@ -29,7 +29,7 @@ library
       Compile
       IR
       Parser
-      Path
+      Pass
       Type
       TypInf
   other-modules:

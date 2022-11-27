@@ -1,4 +1,4 @@
-module Path where
+module Pass (doAllPass, showTypeCheck) where
 
 import           AST
 import           Compile
@@ -9,8 +9,8 @@ import           Parser
 import           Type
 import           TypInf
 
-doAllPath :: Data.Text.Internal.Lazy.Text -> IO ()
-doAllPath str = do
+doAllPass :: Data.Text.Internal.Lazy.Text -> IO ()
+doAllPass str = do
   let (ast, varNames) = parseStmts str
   typedAst <- execTinfStmts ast varNames
   typedAst' <- mapM toSimpleTyped typedAst

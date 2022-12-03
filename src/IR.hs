@@ -4,7 +4,7 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeFamilies           #-}
 
-module IR where
+module IR (IRStmt (..), IRExpr (..), IRBlockStmt (..), ToIR (toIR), convertStmtsToIRStmts, execConvertStmtsToIRStmts, ConvertEnv, PolymorphicFunType, HasPolymorphicFun(polymorphicFun), HasEnv(env), HasGlobalConstant(globalConstant)) where
 
 import           AST
 import           Control.Lens

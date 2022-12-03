@@ -7,7 +7,6 @@ module Alpha (alpha) where
 import           AST
 import           Control.Lens
 import           Control.Monad.State   (StateT, evalStateT)
-import           Data.Functor.Identity (Identity (..))
 import qualified Data.Map              as M
 import qualified Data.Set              as S
 import           Data.String.Transform

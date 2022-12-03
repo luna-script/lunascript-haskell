@@ -8,11 +8,8 @@ module IR (IRStmt (..), IRExpr (..), IRBlockStmt (..), ToIR (toIR), convertStmts
 
 import           AST
 import           Control.Lens
-import           Control.Monad.Reader
 import           Control.Monad.State        (StateT (runStateT))
-import           Data.Functor.Identity      (Identity (..))
 import           Data.Map                   as M
-import qualified Data.Set                   as S
 import           Data.String.Transform
 import           Data.Text
 import           LLVM.AST                   (Operand)
@@ -23,7 +20,6 @@ import           LLVM.IRBuilder.Instruction
 import           LLVM.IRBuilder.Monad
 import qualified LLVM.Prelude               as P
 import           Type
-import           TypInf                     hiding (TEnv)
 
 type PolymorphicFunType = Map P.ShortByteString (Map P.ShortByteString ([AST.Type], AST.Type))
 

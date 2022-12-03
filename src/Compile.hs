@@ -6,7 +6,7 @@
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
-module Compile where
+module Compile (compileToLLVM) where
 
 import           Control.Lens
 import           Control.Monad.Fix

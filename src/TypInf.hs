@@ -6,7 +6,7 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
-module TypInf where
+module TypInf(TypeCheckException(..), tinfExpr, execTinfExpr, tinfStmts, execTinfStmts) where
 
 import           AST
 import           Control.Exception.Safe

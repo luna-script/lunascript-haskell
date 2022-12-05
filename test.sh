@@ -1,10 +1,11 @@
 #!/bin/bash
+stack install
 result=true
 assert() {
   expected="$1"
   input="$2"
 
-  echo "$input" | stack run | lli
+  echo "$input" | lunascript-haskell-exe | lli
   actual="$?"
 
   if [ "$actual" = "$expected" ]; then
@@ -137,3 +138,4 @@ assert 10 "let a = [[1, 2], [3, 4]];
 let sum(vec) = foldl(fn a, b -> a + b, 0, vec);
 let main = sum(a[0])+sum(a[1]);"
 assert 5 "let get = 5; let main = get;"
+assert 5 "let main = get; let get = 5; "

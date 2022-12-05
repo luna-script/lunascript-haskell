@@ -16,7 +16,6 @@ data Typ
   | TFun Typ Typ
   | TVector Typ
   | TVar Integer (IORef (Maybe Typ))
-  | TThunk Typ
   | QVar Integer
 
 data Typ'
@@ -25,7 +24,6 @@ data Typ'
   | TUnit'
   | TFun' Typ' Typ'
   | TVector' Typ'
-  | TThunk' Typ'
   | QVar' Integer
   deriving (Show, Eq)
 
@@ -45,9 +43,6 @@ showTyp (TVar n r) = do
   case t of
     Just typ -> showTyp typ
     Nothing  -> pure $ show n
-showTyp (TThunk t) = do
-  showt <- showTyp t
-  pure $ "TThunk (" ++ showt ++ ")"
 showTyp (QVar n) = pure $ "a" ++ show n
 
 class ToTyp' t where
@@ -65,9 +60,6 @@ instance ToTyp' Typ where
     t2' <- toTyp' t2
     pure $ TFun' t1' t2'
   toTyp' (TVector t) = TVector' <$> toTyp' t
-  toTyp' (TThunk t) = do
-    t' <- toTyp' t
-    pure $ TThunk' t'
   toTyp' (TVar _ r) = do
     t <- readIORef r
     case t of
@@ -83,7 +75,6 @@ instance ToLLVMType Typ' where
   toLLVMType TUnit' = unitType
   toLLVMType (QVar' n) = error $ "generic TVar " ++ show n
   toLLVMType (TVector' t) = vectorType
-  toLLVMType (TThunk' t) = ASTType.PointerType (ASTType.FunctionType (toLLVMType t) [] False) (AddrSpace 0)
   toLLVMType (TFun' t1 t2) =
     let separateArgsAndResultType :: Typ' -> ([Typ'], Typ')
         separateArgsAndResultType (TFun' t1_ t2_) =

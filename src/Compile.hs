@@ -120,9 +120,6 @@ compileIRExpr (IRVar name) = do
     Nothing -> case M.lookup name constantEnv of
       Just f  -> call f []
       Nothing -> error $ "variable " ++ toString name ++ " is undefined"
-compileIRExpr (IRExecThunk e) = do
-  e' <- compileIRExpr e
-  call e' []
 compileIRExpr (IRFunApp e1 oprs) = do
   e1' <- compileIRExpr e1
   oprs' <- mapM compileIRExpr oprs
@@ -144,11 +141,6 @@ compileIRStmt :: (MonadModuleBuilder m, MonadFix m) => IRStmt (StateT Env (IRBui
 compileIRStmt (TopLevelConst var t e) = do
   env' <- get
   function (Name var) [] t $ \[] -> do
-    val <- evalStateT (compileIRExpr e) env'
-    ret val
-compileIRStmt (TopLevelThunkDef name t e) = do
-  env' <- get
-  function (Name name) [] t $ \[] -> do
     val <- evalStateT (compileIRExpr e) env'
     ret val
 compileIRStmt (TopLevelFunDef name args returnType body) = do

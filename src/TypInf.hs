@@ -6,7 +6,7 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
-module TypInf(TypeCheckException(..), tinfExpr, execTinfExpr, tinfStmts, execTinfStmts) where
+module TypInf (TypeCheckException (..), tinfExpr, execTinfExpr, tinfStmts, execTinfStmts) where
 
 import           AST
 import           Control.Exception.Safe
@@ -91,14 +91,6 @@ tinfExpr (EIf cond thenExpr elseExpr) = do
   (t3, elseExpr') <- tinfExpr elseExpr
   unify t2 t3
   pure (t2, EIf cond' thenExpr' elseExpr')
-tinfExpr (EThunk e) = do
-  (t, e') <- tinfExpr e
-  pure (TThunk t, EThunk e')
-tinfExpr (ExecThunk e) = do
-  (t, e') <- tinfExpr e
-  t' <- newTVar
-  unify (TThunk t') t
-  pure (t', ExecThunk e')
 tinfExpr (EBlock xs x) = do
   tenv <- use typeEnv
   xs' <- mapM tinfBlockStmt xs
@@ -171,7 +163,6 @@ instantiate t = evalStateT (go t) M.empty
     go TInt = pure TInt
     go TBool = pure TBool
     go TUnit = pure TUnit
-    go (TThunk t) = TThunk <$> go t
     go (TFun t1 t2) = TFun <$> go t1 <*> go t2
     go (TVector t) = TVector <$> go t
     go ty@(TVar _ r) = do
@@ -192,7 +183,6 @@ unify :: Typ -> Typ -> StateT TEnv IO ()
 unify TInt TInt = pure ()
 unify TBool TBool = pure ()
 unify TUnit TUnit = pure ()
-unify (TThunk t1) (TThunk t2) = unify t1 t2
 unify (TVector t1) (TVector t2) = unify t1 t2
 unify (TFun t11 t21) (TFun t12 t22) = do
   unify t11 t12
@@ -239,5 +229,4 @@ occur n (TVar m r) =
       case t of
         Nothing -> pure False
         Just t' -> occur n t'
-occur n (TThunk t) = occur n t
 occur _ (QVar _) = pure False

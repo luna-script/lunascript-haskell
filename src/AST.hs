@@ -19,8 +19,6 @@ data Expr a where
   EIf :: Expr a -> Expr a -> Expr a -> Expr a
   Fun :: XVar a -> Expr a -> Expr a
   FunApp :: Expr a -> Expr a -> Expr a
-  EThunk :: Expr a -> Expr a
-  ExecThunk :: Expr a -> Expr a
   EBlock :: [BlockStmt a] -> Expr a -> Expr a
   EVector :: XVec a -> Expr a
   deriving (Show)
@@ -83,10 +81,6 @@ instance TypeOf (Expr Typed) where
   typeOf (FunApp e _) = case typeOf e of
     TFun _ t -> t
     _        -> error "Internal Error"
-  typeOf (EThunk e) = TThunk (typeOf e)
-  typeOf (ExecThunk e) = case typeOf e of
-    TThunk t -> t
-    _        -> error "Internal Error"
   typeOf (EBlock _ e) = typeOf e
   typeOf (EVector (TypedVec t _)) = TVector t
 
@@ -108,10 +102,6 @@ instance TypeOf (Expr SimpleTyped) where
   typeOf (Fun (SimpleTypedVar t _) e) = TFun' t (typeOf e)
   typeOf (FunApp e _) = case typeOf e of
     TFun' _ t -> t
-    _         -> error "Internal Error"
-  typeOf (EThunk e) = TThunk' (typeOf e)
-  typeOf (ExecThunk e) = case typeOf e of
-    TThunk' t -> t
     _         -> error "Internal Error"
   typeOf (EBlock _ e) = typeOf e
   typeOf (EVector (SimpleTypedVec t _)) = TVector' t
@@ -146,8 +136,6 @@ instance ToSimpleTyped (Expr Typed) where
     e1' <- toSimpleTyped e1
     e2' <- toSimpleTyped e2
     pure $ FunApp e1' e2'
-  toSimpleTyped (EThunk e) = EThunk <$> toSimpleTyped e
-  toSimpleTyped (ExecThunk e) = ExecThunk <$> toSimpleTyped e
   toSimpleTyped (EBlock es e) = do
     es' <- mapM convertEStmt es
     e' <- toSimpleTyped e

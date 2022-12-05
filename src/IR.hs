@@ -35,7 +35,6 @@ makeFields ''ConvertEnv
 
 data IRStmt m
   = TopLevelConst P.ShortByteString AST.Type (IRExpr m)
-  | TopLevelThunkDef P.ShortByteString AST.Type (IRExpr m)
   | TopLevelFunDef P.ShortByteString [(AST.Type, P.ShortByteString)] AST.Type (IRExpr m)
 
 data IRExpr m where
@@ -47,7 +46,6 @@ data IRExpr m where
   IRIf :: IRExpr m -> IRExpr m -> IRExpr m -> IRExpr m
   IRVar :: P.ShortByteString -> IRExpr m
   IRFunApp :: IRExpr m -> [IRExpr m] -> IRExpr m
-  IRExecThunk :: IRExpr m -> IRExpr m
   IRBlock :: [IRBlockStmt m] -> IRExpr m -> IRExpr m
 
 data IRBlockStmt m
@@ -114,7 +112,6 @@ instance ToIR (Expr SimpleTyped) where
             let fn' = M.insert spName (fmap toLLVMType args, toLLVMType resultT) fn
             polymorphicFun .= M.insert sName fn' pFun
             pure $ IRVar spName
-  toIR (ExecThunk e) = IRExecThunk <$> toIR e
   toIR e@(Fun _ _) = do
     genList <- use generateList
     name <- newLambdaName
@@ -122,7 +119,6 @@ instance ToIR (Expr SimpleTyped) where
     let fun = TopLevelLet (SimpleTypedVar t name) e
     generateList .= fun : genList
     pure $ IRVar $ toShortByteString name
-  toIR (EThunk _) = error "unimplemented"
   toIR (EBlock xs x) = do
     xs' <- mapM convertBlockStmtToIRBlockStmt xs
     x' <- toIR x
@@ -138,16 +134,6 @@ instance ToIR (Expr SimpleTyped) where
 
 instance ToIR (Stmt SimpleTyped) where
   type IR (Stmt SimpleTyped) = IRStmt
-  toIR (TopLevelLet (SimpleTypedVar t var) (EThunk e)) = do
-    env' <- use env
-    let name = toShortByteString var
-        llvmType = toLLVMType t
-        t' = case t of
-          TThunk' t_ -> t_
-          _          -> error "Internal Error"
-    env .= M.insert name llvmType env'
-    e' <- toIR e
-    pure $ TopLevelThunkDef name (toLLVMType t') e'
   toIR (TopLevelLet (SimpleTypedVar t var) (Fun (SimpleTypedVar _ name) e)) = do
     env' <- use env
     env .= M.insert (toShortByteString var) (toLLVMType t) env'

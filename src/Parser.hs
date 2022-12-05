@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TemplateHaskell        #-}
-module Parser where
+module Parser (Parser, sc, lexeme, symbol, identifier, keywords, ops, expr, parens, factor, vector, vectorGet, exprIf, app, appliedExpr, program, topLevelFunDef, block, lambda, topLevelLet, parseExpr, parseStmts) where
 
 import           AST
 import           Control.Lens
@@ -112,7 +112,7 @@ app = do
     e <- appliedExpr
     args <- parens (expr `sepBy` symbol ",")
     case args of
-        []  -> pure $ ExecThunk e
+        []  -> pure $ FunApp e EUnit
         _:_ -> pure $ F.foldl' FunApp e args
 
 appliedExpr :: Parser (Expr Parsed)
@@ -135,7 +135,7 @@ topLevelFunDef = do
     varNames <- use topLevelVarName
     topLevelVarName .= S.insert (toTextStrict ident) varNames
     case args of
-      []  -> pure $ TopLevelLet (ParsedVar ident) $ EThunk e
+      []  -> pure $ TopLevelLet (ParsedVar ident) $ Fun (ParsedVar "0") e
       _:_ -> pure $ TopLevelLet (ParsedVar ident) $ F.foldr (Fun . ParsedVar) e args
 
 block :: Parser (Expr Parsed)

@@ -4,7 +4,7 @@
 {-# LANGUAGE StarIsType            #-}
 {-# LANGUAGE TypeFamilies          #-}
 
-module AST (Expr(..), BlockStmt(..), Stmt(..), Parsed, Typed, SimpleTyped, XVar(..), XVec(..), TypeOf(typeOf), ToSimpleTyped(toSimpleTyped)) where
+module AST (Expr (..), BlockStmt (..), Stmt (..), Parsed, Typed, SimpleTyped, XVar (..), XVec (..), TypeOf (typeOf), ToSimpleTyped (toSimpleTyped)) where
 
 import           Data.String.Transform (ToString (..))
 import           Data.Text             (Text)
@@ -25,7 +25,7 @@ data Expr a where
 
 data BlockStmt a
   = BExprStmt (Expr a)
-  | BLet (XVar a) (Expr a)
+  | BLet Bool (XVar a) (Expr a)
   deriving (Show)
 
 data Stmt a
@@ -145,10 +145,10 @@ instance ToSimpleTyped (Expr Typed) where
       convertEStmt (BExprStmt e) = do
         e' <- toSimpleTyped e
         pure $ BExprStmt e'
-      convertEStmt (BLet (TypedVar t name) e) = do
+      convertEStmt (BLet b (TypedVar t name) e) = do
         e' <- toSimpleTyped e
         t' <- toTyp' t
-        pure $ BLet (SimpleTypedVar t' name) e'
+        pure $ BLet b (SimpleTypedVar t' name) e'
 
 instance ToSimpleTyped (Stmt Typed) where
   type ToSimpleTypedResult (Stmt Typed) = IO (Stmt SimpleTyped)

@@ -1,4 +1,4 @@
-module Pass (doAllPass, showTypeCheck) where
+module Pass (doAllPass, showTypeCheck, showAlpha) where
 
 import           Alpha
 import           AST
@@ -24,3 +24,11 @@ showTypeCheck str = do
   typedAst <- execTinfStmts ast varNames
   typedAst' <- mapM toSimpleTyped typedAst
   print typedAst'
+
+showAlpha :: Data.Text.Internal.Lazy.Text -> IO ()
+showAlpha str = do
+  let (ast, varNames) = parseStmts str
+  typedAst <- execTinfStmts ast varNames
+  typedAst' <- mapM toSimpleTyped typedAst
+  let typedAst'' = alpha varNames typedAst'
+  print typedAst''

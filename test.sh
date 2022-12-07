@@ -139,3 +139,18 @@ let sum(vec) = foldl(fn a, b -> a + b, 0, vec);
 let main = sum(a[0])+sum(a[1]);"
 assert 5 "let get = 5; let main = get;"
 assert 5 "let main = get; let get = 5; "
+assert 5 "let main = {
+    let a = 1;
+    let! a = a + 4;
+    a
+}"
+assert 5 "let main = {
+    let a = 5;
+    let! a = a;
+    a
+}"
+assert 5 "let main = {
+    let add(a, b) = a + b;
+    let! add = add;
+    add(2, 3)
+}"

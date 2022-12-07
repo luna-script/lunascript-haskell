@@ -64,7 +64,7 @@ tinfExpr (BinOp op e1 e2) | op `elem` ["==", "<", ">"] = do
   unify t2 TInt
   pure (TBool, BinOp op e1' e2')
 tinfExpr BinOp {} = error "unimpremented"
-tinfExpr (Var (ParsedVar x)) = do
+tinfExpr (Var (ParsedVar t x)) = do
   tenv <- use typeEnv
   case M.lookup x tenv of
     Just t -> do
@@ -72,7 +72,7 @@ tinfExpr (Var (ParsedVar x)) = do
       _ <- liftIO $ showTyp t'
       pure (t', Var (TypedVar t' x))
     Nothing -> throw $ VariableNotFound x
-tinfExpr (Fun (ParsedVar x) e) = do
+tinfExpr (Fun (ParsedVar t x) e) = do
   t1 <- newTVar
   tenv <- use typeEnv
   typeEnv .= M.insert x t1 tenv
@@ -99,7 +99,7 @@ tinfExpr (EBlock xs x) = do
   typeEnv .= tenv
   pure (t, EBlock xs' x')
   where
-    tinfBlockStmt (BLet b (ParsedVar name) e) = do
+    tinfBlockStmt (BLet b (ParsedVar t name) e) = do
       typ <- newTVar
       tenv <- use typeEnv
       unless b $ typeEnv .= M.insert name typ tenv
@@ -116,7 +116,7 @@ execTinfExpr e = evalStateT (tinfExpr e) (TEnv 0 M.empty)
 
 tinfStmts :: [Stmt Parsed] -> StateT TEnv IO [Stmt Typed]
 tinfStmts [] = pure []
-tinfStmts ((TopLevelLet (ParsedVar x) e) : xs) = do
+tinfStmts ((TopLevelLet (ParsedVar t x) e) : xs) = do
   tenv <- use typeEnv
   typ <- case M.lookup x tenv of
     Just t -> pure t
@@ -126,6 +126,11 @@ tinfStmts ((TopLevelLet (ParsedVar x) e) : xs) = do
       pure t
   (typ', e') <- tinfExpr e
   unify typ typ'
+  case t of
+    Just t -> do
+      t' <- instantiate t
+      unify typ t'
+    Nothing -> pure ()
   (TopLevelLet (TypedVar typ x) e' :) <$> tinfStmts xs
 
 execTinfStmts :: [Stmt Parsed] -> S.Set Text -> IO [Stmt Typed]

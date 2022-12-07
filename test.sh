@@ -154,3 +154,17 @@ assert 5 "let main = {
     let! add = add;
     add(2, 3)
 }"
+assert 10 "
+add : Int -> Int -> Int
+let add(a, b) = a + b;
+
+main : Int
+let main = add(4, 6);
+"
+assert 10 "
+hoge : Int -> Bool -> Int
+let hoge(a, b) = a;
+
+main : Int
+let main = hoge(10, True);
+"

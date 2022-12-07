@@ -75,17 +75,17 @@ alpha' (TopLevelLet (SimpleTypedVar t name) e) = do
 
     alphaBlock :: BlockStmt SimpleTyped -> StateT Env Identity (BlockStmt SimpleTyped)
     alphaBlock (BExprStmt e) = BExprStmt <$> alphaExpr e
-    alphaBlock (BLet (SimpleTypedVar t name) e) = do
+    alphaBlock (BLet b (SimpleTypedVar t name) e) = do
       newName <- getNewName name
-      if isFunctionType t
+      if b
         then do
-          convertMap %= M.insert name newName
           e' <- alphaExpr e
-          pure $ BLet (SimpleTypedVar t newName) e'
+          convertMap %= M.insert name newName
+          pure $ BLet b (SimpleTypedVar t newName) e'
         else do
-          e' <- alphaExpr e
           convertMap %= M.insert name newName
-          pure $ BLet (SimpleTypedVar t newName) e'
+          e' <- alphaExpr e
+          pure $ BLet b (SimpleTypedVar t newName) e'
 
 isFunctionType :: Typ' -> Bool
 isFunctionType (TFun' _ _) = True

@@ -4,7 +4,7 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeFamilies           #-}
 
-module IR (IRStmt (..), IRExpr (..), IRBlockStmt (..), ToIR (toIR), convertStmtsToIRStmts, execConvertStmtsToIRStmts, ConvertEnv, PolymorphicFunType, HasPolymorphicFun(polymorphicFun), HasEnv(env), HasGlobalConstant(globalConstant)) where
+module IR (IRStmt (..), IRExpr (..), IRBlockStmt (..), ToIR (toIR), convertStmtsToIRStmts, execConvertStmtsToIRStmts, ConvertEnv, PolymorphicFunType, HasPolymorphicFun (polymorphicFun), HasEnv (env), HasGlobalConstant (globalConstant)) where
 
 import           AST
 import           Control.Lens
@@ -125,7 +125,7 @@ instance ToIR (Expr SimpleTyped) where
     pure $ IRBlock xs' x'
     where
       convertBlockStmtToIRBlockStmt :: (MonadIRBuilder m) => BlockStmt SimpleTyped -> StateT ConvertEnv Identity (IRBlockStmt m)
-      convertBlockStmtToIRBlockStmt (BLet (SimpleTypedVar _ name) e) = do
+      convertBlockStmtToIRBlockStmt (BLet b (SimpleTypedVar _ name) e) = do
         e' <- toIR e
         pure $ IRBLet (toShortByteString name) e'
       convertBlockStmtToIRBlockStmt (BExprStmt e) = do

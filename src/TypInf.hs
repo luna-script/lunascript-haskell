@@ -11,6 +11,7 @@ module TypInf (TypeCheckException (..), tinfExpr, execTinfExpr, tinfStmts, execT
 import           AST
 import           Control.Exception.Safe
 import           Control.Lens              hiding (op)
+import           Control.Monad             (unless, when)
 import           Control.Monad.IO.Class
 import           Control.Monad.State       (lift)
 import           Control.Monad.Trans.State
@@ -98,13 +99,14 @@ tinfExpr (EBlock xs x) = do
   typeEnv .= tenv
   pure (t, EBlock xs' x')
   where
-    tinfBlockStmt (BLet (ParsedVar name) e) = do
+    tinfBlockStmt (BLet b (ParsedVar name) e) = do
       typ <- newTVar
       tenv <- use typeEnv
-      typeEnv .= M.insert name typ tenv
+      unless b $ typeEnv .= M.insert name typ tenv
       (typ', e') <- tinfExpr e
       unify typ typ'
-      pure $ BLet (TypedVar typ name) e'
+      when b $ typeEnv .= M.insert name typ tenv
+      pure $ BLet b (TypedVar typ name) e'
     tinfBlockStmt (BExprStmt e) = do
       (_, e') <- tinfExpr e
       pure $ BExprStmt e'

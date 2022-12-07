@@ -28,8 +28,8 @@ data BlockStmt a
   | BLet Bool (XVar a) (Expr a)
   deriving (Show)
 
-data Stmt a
-  = TopLevelLet (XVar a) (Expr a)
+data Stmt a where
+  TopLevelLet :: XVar a -> Expr a -> Stmt a
   deriving (Show)
 
 data Parsed = Parsed deriving (Show, Eq)
@@ -39,7 +39,7 @@ data Typed = Typed deriving (Show, Eq)
 data SimpleTyped = SimpleTyped deriving (Show, Eq)
 
 data XVar a where
-  ParsedVar :: Text -> XVar Parsed
+  ParsedVar :: Maybe Typ -> Text -> XVar Parsed
   TypedVar :: Typ -> Text -> XVar Typed
   SimpleTypedVar :: Typ' -> Text -> XVar SimpleTyped
 
@@ -54,7 +54,7 @@ instance Show (XVec a) where
   show (SimpleTypedVec _ xs) = show xs
 
 instance Show (XVar a) where
-  show (ParsedVar name)        = toString name
+  show (ParsedVar _ name)      = toString name
   show (TypedVar _ name)       = toString name
   show (SimpleTypedVar t name) = "(" ++ toString name ++ " :: " ++ show t ++ ")"
 

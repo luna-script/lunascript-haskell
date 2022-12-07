@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Type (Typ(..), Typ'(..), showTyp, ToTyp' (toTyp'), ToLLVMType (..), separateFunType, unitType, foldlLlvmType, foldlType, rawVector2Type, vector2Type, rawVector1Type, vector1Type, vectorType) where
+module Type (Typ(..), Typ'(..), showTyp, ToTyp' (toTyp'), ToLLVMType (..), separateFunType, unitType, foldlLlvmType, foldlType, rawVector2Type, vector2Type, rawVector1Type, vector1Type, vectorType, toTyp) where
 
 import           Data.IORef         (IORef)
 import           GHC.IORef          (readIORef)
@@ -26,6 +26,14 @@ data Typ'
   | TVector' Typ'
   | QVar' Integer
   deriving (Show, Eq)
+
+toTyp :: Typ' -> Typ
+toTyp TInt'         = TInt
+toTyp TBool'        = TBool
+toTyp TUnit'        = TUnit
+toTyp (TFun' t1 t2) = TFun (toTyp t1) (toTyp t2)
+toTyp (TVector' t)  = TVector (toTyp t)
+toTyp (QVar' n)     = QVar n
 
 showTyp :: Typ -> IO String
 showTyp TInt = pure "Int"

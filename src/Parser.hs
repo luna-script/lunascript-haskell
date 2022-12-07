@@ -12,6 +12,7 @@ import           Control.Monad.Combinators.Expr
 import           Control.Monad.State
 import           Data.Foldable                  as F
 import           Data.Functor                   (($>))
+import qualified Data.Map                       as M
 import qualified Data.Set                       as S
 import           Data.String.Transform
 import qualified Data.Text                      as DT
@@ -20,6 +21,7 @@ import           Data.Void
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer     as L
+import           Type
 
 type Parser = StateT ParserEnv (ParsecT Void Text Identity)
 
@@ -86,7 +88,7 @@ factor =
     <|> try vectorGet
     <|> vector
     <|> EInt <$> lexeme L.decimal
-    <|> Var . ParsedVar <$> lexeme identifier
+    <|> Var . ParsedVar Nothing <$> lexeme identifier
     <|> ( do
             lit <- symbol "True" <|> symbol "False"
             if lit == "True" then pure $ EBool True else pure $ EBool False
@@ -101,7 +103,7 @@ vectorGet :: Parser (Expr Parsed)
 vectorGet = do
   e <- appliedExpr
   index' <- some $ between (symbol "[") (symbol "]") (expr `sepBy1` symbol ",")
-  pure $ foldl (\acm e' -> FunApp (FunApp (Var $ ParsedVar "get") e') acm) e $ concat index'
+  pure $ foldl (\acm e' -> FunApp (FunApp (Var $ ParsedVar Nothing "get") e') acm) e $ concat index'
 
 exprIf :: Parser (Expr Parsed)
 exprIf = do
@@ -120,7 +122,7 @@ app = do
     _ : _ -> pure $ F.foldl' FunApp e args
 
 appliedExpr :: Parser (Expr Parsed)
-appliedExpr = parens expr <|> (Var . ParsedVar <$> lexeme identifier) <|> vector
+appliedExpr = parens expr <|> Var . ParsedVar Nothing <$> lexeme identifier <|> vector
 
 program :: Parser [Stmt Parsed]
 program = stmt `sepEndBy` symbol ";"
@@ -132,6 +134,7 @@ stmt =
 
 topLevelFunDef :: Parser (Stmt Parsed)
 topLevelFunDef = do
+  typeAnnotation <- optional $ try typeAnnotate
   symbol "let"
   ident <- identifier
   args <- parens (identifier `sepBy` symbol ",")
@@ -139,20 +142,23 @@ topLevelFunDef = do
   e <- expr
   varNames <- use topLevelVarName
   topLevelVarName .= S.insert (toTextStrict ident) varNames
-  case args of
-    [] -> pure $ TopLevelLet (ParsedVar ident) $ Fun (ParsedVar "0") e
-    _ : _ -> pure $ TopLevelLet (ParsedVar ident) $ F.foldr (Fun . ParsedVar) e args
+  let resultFun = \t -> case args of
+        [] -> TopLevelLet (ParsedVar t ident) $ Fun (ParsedVar Nothing "0") e
+        _ : _ -> TopLevelLet (ParsedVar t ident) $ F.foldr (Fun . ParsedVar Nothing) e args
+  case typeAnnotation of
+    Just (ident', t) -> if ident' == ident then pure $ resultFun $ Just t else fail $ "does not match " <> toString ident <> " and " <> toString ident'
+    Nothing -> pure $ resultFun Nothing
 
 internalFunDef :: Parser (BlockStmt Parsed)
 internalFunDef = do
-  symbol' <- (symbol "let!" $> True) <|> (symbol "let" $> False)
+  symbol' <- symbol "let!" $> True <|> symbol "let" $> False
   ident <- identifier
   args <- parens (identifier `sepBy` symbol ",")
   symbol "="
   e <- expr
   case args of
-    [] -> pure $ BLet symbol' (ParsedVar ident) $ Fun (ParsedVar "0") e
-    _ : _ -> pure $ BLet symbol' (ParsedVar ident) $ F.foldr (Fun . ParsedVar) e args
+    [] -> pure $ BLet symbol' (ParsedVar Nothing ident) $ Fun (ParsedVar Nothing "0") e
+    _ : _ -> pure $ BLet symbol' (ParsedVar Nothing ident) $ F.foldr (Fun . ParsedVar Nothing) e args
 
 block :: Parser (Expr Parsed)
 block = do
@@ -166,12 +172,12 @@ block = do
     blockstmt :: Parser (BlockStmt Parsed)
     blockstmt =
       try internalFunDef
-      <|> ( do
-          symbol' <- (symbol "let!" $> True) <|> (symbol "let" $> False)
-          ident <- identifier
-          symbol "="
-          BLet symbol' (ParsedVar ident) <$> expr
-      )
+        <|> ( do
+                symbol' <- symbol "let!" $> True <|> symbol "let" $> False
+                ident <- identifier
+                symbol "="
+                BLet symbol' (ParsedVar Nothing ident) <$> expr
+            )
         <|> BExprStmt <$> expr
 
 lambda :: Parser (Expr Parsed)
@@ -180,16 +186,72 @@ lambda = do
   args <- identifier `sepBy1` symbol ","
   symbol "->"
   e <- expr
-  pure $ foldr (Fun . ParsedVar) e args
+  pure $ foldr (Fun . ParsedVar Nothing) e args
+
+type Env = (Integer, M.Map DT.Text Integer)
+
+evalType :: Parser Typ
+evalType = evalStateT typeWithFun (0, M.empty)
+
+typeWithFun :: StateT Env Parser Typ
+typeWithFun = try typeFun <|> typeBottom
+
+typeBottom :: StateT Env Parser Typ
+typeBottom =
+  lift (symbol "Int" $> TInt <|> symbol "Bool" $> TBool <|> symbol "Unit" $> TUnit) <|> typeQVar <|> typeVector
+    <|> ( do
+            lift $ symbol "("
+            t <- typeWithFun
+            lift $ symbol ")"
+            pure t
+        )
+
+typeQVar :: StateT Env Parser Typ
+typeQVar = do
+  ident <- lift identifier
+  (n, typeMap) <- get
+  case M.lookup ident typeMap of
+    Just n' -> pure $ QVar n'
+    Nothing -> do
+      _1 .= n + 1
+      _2 .= M.insert ident n typeMap
+      pure $ QVar n
+
+typeVector :: StateT Env Parser Typ
+typeVector = do
+  lift $ symbol "Vector"
+  lift $ symbol "["
+  t <- typeBottom
+  lift $ symbol "]"
+  pure $ TVector t
+
+typeFun :: StateT Env Parser Typ
+typeFun = do
+  t1 <- typeBottom
+  lift $ symbol "->"
+  TFun t1 <$> typeWithFun
+
+typeAnnotate :: Parser (DT.Text, Typ)
+typeAnnotate =  do
+  ident <- identifier
+  symbol ":"
+  t <- evalType
+  pure (ident, t)
 
 topLevelLet :: Parser (Stmt Parsed)
 topLevelLet = do
+  typeAnnotation <- optional $ try typeAnnotate
   symbol "let"
   ident <- identifier
   symbol "="
   varNames <- use topLevelVarName
   topLevelVarName .= S.insert (toTextStrict ident) varNames
-  TopLevelLet (ParsedVar ident) <$> expr
+  case typeAnnotation of
+    Just (ident', t) ->
+      if ident == ident'
+        then TopLevelLet (ParsedVar (Just t) ident) <$> expr
+        else fail $ "does not match name: " <> toString ident <> " and " <> toString ident'
+    Nothing -> TopLevelLet (ParsedVar Nothing ident) <$> expr
 
 parseExpr :: Text -> (Expr Parsed, S.Set DT.Text)
 parseExpr str = case parse (runStateT (sc *> expr <* lexeme eof) $ ParserEnv S.empty) "<stdin>" str of

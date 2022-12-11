@@ -119,7 +119,7 @@ tinfStmts [] = pure []
 tinfStmts ((TopLevelLet (ParsedVar t x) e) : xs) = do
   tenv <- use typeEnv
   typ <- case M.lookup x tenv of
-    Just t -> pure t
+    Just t -> instantiate t
     Nothing -> do
       t <- newTVar
       typeEnv .= M.insert x t tenv
@@ -131,7 +131,21 @@ tinfStmts ((TopLevelLet (ParsedVar t x) e) : xs) = do
       t' <- instantiate t
       unify typ t'
     Nothing -> pure ()
+  generalize typ
   (TopLevelLet (TypedVar typ x) e' :) <$> tinfStmts xs
+
+generalize :: Typ -> StateT TEnv IO ()
+generalize (TVar n r) = do
+  t <- liftIO $ readIORef r
+  case t of
+    Just t' -> generalize t'
+    Nothing -> lift $ writeIORef r $ Just (QVar n)
+generalize (TVector t) = do
+  generalize t
+generalize (TFun t1 t2) = do
+  generalize t1
+  generalize t2
+generalize ty = pure ()
 
 execTinfStmts :: [Stmt Parsed] -> S.Set Text -> IO [Stmt Typed]
 execTinfStmts stmts varNames =

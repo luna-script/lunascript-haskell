@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Type (Typ(..), Typ'(..), showTyp, ToTyp' (toTyp'), ToLLVMType (..), separateFunType, unitType, foldlLlvmType, foldlType, rawVector2Type, vector2Type, rawVector1Type, vector1Type, vectorType, toTyp) where
+module Type (Typ(..), Typ'(..), showTyp, ToTyp' (toTyp'), ToLLVMType (..), separateFunType, unitType, foldlLlvmType, foldlType, rawVector2Type, vector2Type, rawVector1Type, vector1Type, vectorType, toTyp, hasQVar) where
 
 import           Data.IORef         (IORef)
 import           GHC.IORef          (readIORef)
@@ -97,6 +97,12 @@ separateFunType (TFun' arg t) =
   let (args, result) = separateFunType t
    in (arg : args, result)
 separateFunType t = ([], t)
+
+hasQVar :: Typ' -> Bool
+hasQVar (QVar' _)     = True
+hasQVar (TVector' t)  = hasQVar t
+hasQVar (TFun' t1 t2) = hasQVar t1 && hasQVar t2
+hasQVar _             = False
 
 unitType :: Type
 unitType = StructureType False []

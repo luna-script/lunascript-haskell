@@ -174,6 +174,12 @@ let fact(n) = {
     let go(n, result) = if (n==0) result else go(n-1, n*result);
     go(n, 1)
 }"
+assert 6 "let fact(n) = {
+    let go(n, result) = if (n==0) result else go(n-1, n*result);
+    go(n, 1)
+};
+let main = fact(3);
+"
 assert 0 "let id(n) = n;
 let main = id(id(1)==0);"
 assert 0 "let id(n) = n;

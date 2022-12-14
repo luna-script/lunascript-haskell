@@ -69,11 +69,10 @@ tinfExpr (Var (ParsedVar t x)) = do
   case M.lookup x tenv of
     Just t -> do
       t' <- instantiate t
-      _ <- liftIO $ showTyp t'
       pure (t', Var (TypedVar t' x))
     Nothing -> throw $ VariableNotFound x
 tinfExpr (Fun (ParsedVar t x) e) = do
-  t1 <- newTVar
+  t1 <- maybe newTVar pure t
   tenv <- use typeEnv
   typeEnv .= M.insert x t1 tenv
   (t2, e') <- tinfExpr e

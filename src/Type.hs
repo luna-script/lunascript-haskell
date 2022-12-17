@@ -89,7 +89,7 @@ instance ToLLVMType Typ' where
   toLLVMType TBool' = ASTType.i1
   toLLVMType TUnit' = unitType
   toLLVMType (QVar' _) = ptr ASTType.i8
-  toLLVMType (TRef' _) = ptr ASTType.i8
+  toLLVMType (TRef' t) = ptr (toLLVMType t)
   toLLVMType (TVector' _) = vectorType
   toLLVMType t@(TFun' _ _) =
     let (argsType, _) = separateFunType t

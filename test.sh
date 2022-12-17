@@ -168,3 +168,20 @@ let hoge(a, b) = a;
 main : Int
 let main = hoge(10, True);
 "
+assert 6 "
+let main = fact(3);
+let fact(n) = {
+    let go(n, result) = if (n==0) result else go(n-1, n*result);
+    go(n, 1)
+}"
+assert 6 "let fact(n) = {
+    let go(n, result) = if (n==0) result else go(n-1, n*result);
+    go(n, 1)
+};
+let main = fact(3);
+"
+assert 0 "let id(n) = n;
+let main = id(id(1)==0);"
+assert 0 "let id(n) = n;
+let id2(n) = id(n);
+let main = id2(id2(1)==0);"

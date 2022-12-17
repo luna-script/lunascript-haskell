@@ -143,7 +143,7 @@ topLevelFunDef = do
   varNames <- use topLevelVarName
   topLevelVarName .= S.insert (toTextStrict ident) varNames
   let resultFun = \t -> case args of
-        [] -> TopLevelLet (ParsedVar t ident) $ Fun (ParsedVar Nothing "0") e
+        [] -> TopLevelLet (ParsedVar t ident) $ Fun (ParsedVar (Just TUnit) "0") e
         _ : _ -> TopLevelLet (ParsedVar t ident) $ F.foldr (Fun . ParsedVar Nothing) e args
   case typeAnnotation of
     Just (ident', t) -> if ident' == ident then pure $ resultFun $ Just t else fail $ "does not match " <> toString ident <> " and " <> toString ident'

@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Type (Typ(..), Typ'(..), showTyp, ToTyp' (toTyp'), ToLLVMType (..), separateFunType, unitType, foldlLlvmType, foldlType, rawVector2Type, vector2Type, rawVector1Type, vector1Type, vectorType, toTyp) where
+module Type (Typ (..), Typ' (..), showTyp, ToTyp' (toTyp'), ToLLVMType (..), separateFunType, unitType, foldlLlvmType, foldlType, rawVector2Type, vector2Type, rawVector1Type, vector1Type, vectorType, toTyp, hasQVar) where
 
 import           Data.IORef         (IORef)
 import           GHC.IORef          (readIORef)
@@ -78,19 +78,14 @@ class ToLLVMType t where
   toLLVMType :: t -> ASTType.Type
 
 instance ToLLVMType Typ' where
-  toLLVMType TInt' = ASTType.i32
+  toLLVMType TInt' = ASTType.i64
   toLLVMType TBool' = ASTType.i1
   toLLVMType TUnit' = unitType
-  toLLVMType (QVar' n) = error $ "generic TVar " ++ show n
-  toLLVMType (TVector' t) = vectorType
-  toLLVMType (TFun' t1 t2) =
-    let separateArgsAndResultType :: Typ' -> ([Typ'], Typ')
-        separateArgsAndResultType (TFun' t1_ t2_) =
-          let (args_, result_) = separateArgsAndResultType t2_
-           in (t1_ : args_, result_)
-        separateArgsAndResultType t = ([], t)
-        (args, result) = separateArgsAndResultType t2
-     in ASTType.PointerType (ASTType.FunctionType (toLLVMType result) (fmap toLLVMType $ t1 : args) False) (AddrSpace 0)
+  toLLVMType (QVar' _) = ptr ASTType.i8
+  toLLVMType (TVector' _) = vectorType
+  toLLVMType t@(TFun' _ _) =
+    let (argsType, _) = separateFunType t
+     in ptr (ASTType.FunctionType (ptr i8) (ptr i8 <$ argsType) False)
 
 separateFunType :: Typ' -> ([Typ'], Typ')
 separateFunType (TFun' arg t) =
@@ -98,8 +93,14 @@ separateFunType (TFun' arg t) =
    in (arg : args, result)
 separateFunType t = ([], t)
 
+hasQVar :: Typ' -> Bool
+hasQVar (QVar' _)     = True
+hasQVar (TVector' t)  = hasQVar t
+hasQVar (TFun' t1 t2) = hasQVar t1 && hasQVar t2
+hasQVar _             = False
+
 unitType :: Type
-unitType = StructureType False []
+unitType = ptr i8
 
 vectorType :: Type
 vectorType = ptr rawVectorType

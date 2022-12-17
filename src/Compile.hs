@@ -9,6 +9,7 @@
 module Compile (compileToLLVM) where
 
 import           Control.Lens
+import           Control.Monad
 import           Control.Monad.Fix
 import           Control.Monad.State        (MonadState)
 import           Control.Monad.Trans.State
@@ -48,8 +49,23 @@ width1 = 32
 bit1 :: Integer
 bit1 = 5
 
+toAnyType :: (MonadIRBuilder m) => Typ' -> Operand -> m Operand
+toAnyType TInt' e  = inttoptr e (ptr i8)
+toAnyType TBool' e = do
+  e' <- alloca i1 Nothing 0
+  store e' 0 e
+  bitcast e' (ptr i8)
+toAnyType _ e      = bitcast e (ptr i8)
+
+fromAnyType :: MonadIRBuilder m => Typ' -> Operand -> m Operand
+fromAnyType TInt' e  = ptrtoint e i64
+fromAnyType TBool' e = do
+  e' <- bitcast e (ptr i1)
+  load e' 0
+fromAnyType t e      = bitcast e (toLLVMType t)
+
 compileIRExpr :: (MonadState s m, MonadFix m, MonadModuleBuilder m, MonadIRBuilder m, HasGlobalConstant s GlobalContextMap, HasEnv s EnvMap) => IRExpr m -> m Operand
-compileIRExpr (IRInt n) = pure $ int32 n
+compileIRExpr (IRInt n) = pure $ int64 n
 compileIRExpr (IRBool b) = pure $ if b then bit 1 else bit 0
 compileIRExpr IRUnit = pure llvmUnit
 compileIRExpr (IROp op e1 e2) = do
@@ -64,12 +80,13 @@ compileIRExpr (IRVector t xs) = mdo
 
   -- flat vector
   vector1 <- block `named` "vector1"
-  structptr1 <- alloca (rawVector1Type t) Nothing 1
+  structptr1 <- alloca (rawVector1Type (ptr i8)) Nothing 1
   vecptr1 <- gep structptr1 [int32 0, int32 1]
   mapM_
     ( \(x, i) -> do
         ptr <- gep vecptr1 [int32 0, int32 i]
-        store ptr 1 x
+        x' <- toAnyType t x
+        store ptr 1 x'
     )
     $ zip xs' [0 ..]
   newStructptr1 <- bitcast structptr1 vectorType
@@ -78,14 +95,15 @@ compileIRExpr (IRVector t xs) = mdo
 
   -- 2-dimensional vector
   vector2 <- block `named` "vector2"
-  structptr2 <- alloca (rawVector2Type t) Nothing 1
+  structptr2 <- alloca (rawVector2Type (ptr i8)) Nothing 1
   vecptr2 <- gep structptr2 [int32 0, int32 1]
   mapM_
     ( \(x, i) -> do
         let i2 = i `div` width1
         let i1 = i `mod` width1
         ptr <- gep vecptr2 [int32 0, int32 i2, int32 i1]
-        store ptr 1 x
+        x' <- toAnyType t x
+        store ptr 1 x'
     )
     $ zip xs' [0 ..]
   newStructptr2 <- bitcast structptr2 vectorType
@@ -120,10 +138,12 @@ compileIRExpr (IRVar name) = do
     Nothing -> case M.lookup name constantEnv of
       Just f  -> call f []
       Nothing -> error $ "variable " ++ toString name ++ " is undefined"
-compileIRExpr (IRFunApp e1 oprs) = do
+compileIRExpr (IRFunApp e1 argsType resultType oprs) = do
   e1' <- compileIRExpr e1
   oprs' <- mapM compileIRExpr oprs
-  call e1' (Prelude.zip oprs' (repeat []))
+  oprs'' <- zipWithM toAnyType argsType oprs'
+  result <- call e1' (Prelude.zip oprs'' (repeat []))
+  fromAnyType resultType result
 compileIRExpr (IRBlock xs x) = do
   lenv <- use env
   mapM_ compileIRBlockStmt xs
@@ -140,16 +160,18 @@ compileIRExpr (IRBlock xs x) = do
 compileIRStmt :: (MonadModuleBuilder m, MonadFix m) => IRStmt (StateT Env (IRBuilderT (StateT Env m))) -> StateT Env m Operand
 compileIRStmt (TopLevelConst var t e) = do
   env' <- get
-  function (Name var) [] t $ \[] -> do
+  function (Name var) [] (toLLVMType t) $ \[] -> do
     val <- evalStateT (compileIRExpr e) env'
     ret val
 compileIRStmt (TopLevelFunDef name args returnType body) = do
   constantEnv <- use globalConstant
   functionEnv <- use env
-  function (Name name) (fmap (Data.Bifunctor.second ParameterName) args) returnType $ \oprs -> do
-    let newEnv = F.foldr (\(k, v) env' -> M.insert k v env') functionEnv (Prelude.zip (fmap snd args) oprs)
+  function (Name name) (fmap (\(t, name) -> (ptr i8, ParameterName name)) args) (ptr i8) $ \oprs -> do
+    oprs' <- zipWithM fromAnyType (fmap fst args) oprs
+    let newEnv = F.foldr (\(k, v) env' -> M.insert k v env') functionEnv (Prelude.zip (fmap snd args) oprs')
     opr <- evalStateT (compileIRExpr body) (Env constantEnv newEnv)
-    ret opr
+    opr' <- toAnyType returnType opr
+    ret opr'
 
 compileIRStmts :: (MonadModuleBuilder m, MonadFix m) => [IRStmt (StateT Env (IRBuilderT (StateT Env m)))] -> StateT Env m Operand
 compileIRStmts [] = error "at least one statement is required"
@@ -172,54 +194,55 @@ compileToLLVM ast convertEnv =
            in ConstantOperand ref
         )
       env' = M.mapWithKey toEnv (convertEnv ^. env)
-      Just getPoly = fmap M.toList $ M.lookup "get" $ convertEnv ^. polymorphicFun
-      Just foldlPoly = fmap M.toList $ M.lookup "foldl" $ convertEnv ^. polymorphicFun
-      Just lengthPoly = fmap M.toList $ M.lookup "length" $ convertEnv ^. polymorphicFun
    in ppllvm $
         buildModule "main" $ do
-          printf <- externVarArgs "printf" [ptr i8] i32
+          printf <- externVarArgs "printf" [ptr i8] i64
           formatint <- globalStringPtr "%d" "$$$formatint"
-          function "print_int" [(i32, "n")] unitType $ \[n] -> do
-            call printf [(ConstantOperand formatint, []), (n, [])]
+          function "print_int" [(ptr i8, "n")] (ptr i8) $ \[n] -> do
+            n' <- fromAnyType TInt' n
+            call printf [(ConstantOperand formatint, []), (n', [])]
             ret llvmUnit
-          mapM_ getImpl getPoly
-          mapM_ foldlImpl foldlPoly
-          mapM_ lengthImpl lengthPoly
-          evalStateT (compileIRStmts ast) (Env globalEnv' env')
+          getFun <- getImpl
+          foldlFun <- foldlImpl
+          lengthFun <- lengthImpl
+          let env'' = M.union env' (M.fromList [("foldl", foldlFun), ("length", lengthFun), ("get", getFun)])
+          evalStateT (compileIRStmts ast) (Env globalEnv' env'')
 
-type PolyArg = (Pr.ShortByteString, ([ASTType.Type], ASTType.Type))
-
-lengthImpl :: (MonadModuleBuilder m) => PolyArg -> m Operand
-lengthImpl (name, (argst, resultt)) = function (Name name) (zip argst ["vec"]) resultt $ \[vec] -> do
-  idxptr <- gep vec [int32 0, int32 0]
+lengthImpl :: (MonadModuleBuilder m) => m Operand
+lengthImpl = function "length" [(ptr i8, "vec")] (ptr i8) $ \[vec] -> do
+  vec' <- fromAnyType (TVector' (QVar' 0)) vec
+  idxptr <- gep vec' [int32 0, int32 0]
   idx <- load idxptr 1
-  ret idx
+  idx' <- inttoptr idx (ptr i8)
+  ret idx'
 
 llvmUnit :: Operand
 llvmUnit = ConstantOperand (Undef unitType)
 
-getImpl :: (MonadModuleBuilder m, MonadFix m) => PolyArg -> m Operand
-getImpl (name, (argst, resultt)) = function (Name name) (zip argst ["n", "vec"]) resultt $ \[n, vec] -> mdo
-  idxptr <- gep vec [int32 0, int32 0]
+getImpl :: (MonadModuleBuilder m, MonadFix m) => m Operand
+getImpl = function "get" [(ptr i8, "n"), (ptr i8, "vec")] (ptr i8) $ \[n, vec] -> mdo
+  vec' <- fromAnyType (TVector' (QVar' 0)) vec
+  n' <- ptrtoint n i32
+  idxptr <- gep vec' [int32 0, int32 0]
   idx <- load idxptr 1
-  cond <- icmp IP.SLT idx $ int32 (width1 + 1)
+  cond <- icmp IP.SLT idx $ int64 (width1 + 1)
   condBr cond vector1 vector2
 
   -- vector 1
   vector1 <- block `named` "vector1"
-  vec1 <- bitcast vec $ vector1Type resultt
+  vec1 <- bitcast vec $ vector1Type (ptr i8)
   vec1' <- gep vec1 [int32 0, int32 1]
-  valptr <- gep vec1' [int32 0, n]
+  valptr <- gep vec1' [int32 0, n']
   val1 <- load valptr 1
   br end
   endOfVector1 <- currentBlock
 
   -- vector 2
   vector2 <- block `named` "vector2"
-  vec2 <- bitcast vec $ vector2Type resultt
+  vec2 <- bitcast vec $ vector2Type (ptr i8)
   vec2' <- gep vec2 [int32 0, int32 1]
-  idx1 <- BI.and n $ int32 (width1 - 1)
-  j <- BI.lshr n $ int32 bit1
+  idx1 <- BI.and n' $ int32 (width1 - 1)
+  j <- BI.lshr n' $ int32 bit1
   idx2 <- BI.and j $ int32 (width1 - 1)
   valptr2 <- gep vec2' [int32 0, idx2, idx1]
   val2 <- load valptr2 1
@@ -232,21 +255,23 @@ getImpl (name, (argst, resultt)) = function (Name name) (zip argst ["n", "vec"])
   result <- phi [(val1, endOfVector1), (val2, endOfVector2)]
   ret result
 
-foldlImpl :: (MonadModuleBuilder m, MonadFix m) => PolyArg -> m Operand
-foldlImpl (name, (argst, resultt)) = function (Name name) (zip argst ["f", "init", "vec"]) resultt $ \[f, init, vec] -> mdo
-  idxptr <- gep vec [int32 0, int32 0]
+foldlImpl :: (MonadModuleBuilder m, MonadFix m) => m Operand
+foldlImpl = function "foldl" [(ptr i8, "f"), (ptr i8, "init"), (ptr i8, "vec")] (ptr i8) $ \[f, init, vec] -> mdo
+  f' <- fromAnyType (TFun' (QVar' 0) (TFun' (QVar' 1) (QVar' 1))) f
+  vec' <- fromAnyType (TVector' (QVar' 0)) vec
+  idxptr <- gep vec' [int32 0, int32 0]
   idx <- load idxptr 1
   idx1 <- BI.and idx $ int32 (width1 - 1)
   j <- BI.lshr idx $ int32 bit1
   idx2 <- BI.and j $ int32 (width1 - 1)
-  resultptr <- alloca resultt Nothing 1
+  resultptr <- alloca (ptr i8) Nothing 1
   store resultptr 1 init
-  cond <- icmp IP.SLT idx2 $ int32 1
+  cond <- icmp IP.SLT idx2 $ int64 1
   condBr cond vector1 vector2
 
   -- vector 1
   vector1 <- block `named` "vector1"
-  castedVec1 <- bitcast vec $ vector1Type a
+  castedVec1 <- bitcast vec $ vector1Type (ptr i8)
   vec1 <- gep castedVec1 [int32 0, int32 1]
   br vector1LoopStart
   loopHeader <- currentBlock
@@ -259,7 +284,7 @@ foldlImpl (name, (argst, resultt)) = function (Name name) (zip argst ["f", "init
   result1 <- load resultptr 1
   vecvalptr <- gep vec1 [int32 0, loopIdx1]
   vecval <- load vecvalptr 1
-  newResult1 <- call f [(result1, []), (vecval, [])]
+  newResult1 <- call f' [(result1, []), (vecval, [])]
   store resultptr 1 newResult1
 
   succLoopIdx1 <- add loopIdx1 $ int32 1
@@ -268,7 +293,7 @@ foldlImpl (name, (argst, resultt)) = function (Name name) (zip argst ["f", "init
 
   -- vector 2
   vector2 <- block `named` "vector2"
-  castedVec2 <- bitcast vec $ vector2Type a
+  castedVec2 <- bitcast vec $ vector2Type (ptr i8)
   vec2 <- gep castedVec2 [int32 0, int32 1]
   br vector2LoopStart2
   loopHeader2 <- currentBlock
@@ -281,17 +306,17 @@ foldlImpl (name, (argst, resultt)) = function (Name name) (zip argst ["f", "init
 
   vector2LoopStart1 <- block `named` "vector2LoopStart1"
   loopIdx21 <- phi [(int32 0, vector2loop2header), (succLoopIdx21, nextloop21)]
-  vector2cond11 <- icmp IP.SLT loopIdx21 $ int32 width1
-  loopIdx22shift <- shl loopIdx22 $ int32 bit1
+  vector2cond11 <- icmp IP.SLT loopIdx21 $ int64 width1
+  loopIdx22shift <- shl loopIdx22 $ int64 bit1
   loopIdx2 <- add loopIdx22shift loopIdx21
   vector2cond12 <- icmp IP.SLT loopIdx2 idx
   vector2cond1 <- BI.and vector2cond11 vector2cond12
   condBr vector2cond1 vector2Exec vector22outor
   vector2Exec <- block `named` "vector2Exec"
   result2 <- load resultptr 1
-  vecvalptr2 <- gep vec2 [int32 0, loopIdx22, loopIdx21]
+  vecvalptr2 <- gep vec2 [int64 0, loopIdx22, loopIdx21]
   vecval2 <- load vecvalptr2 1
-  newResult2 <- call f [(result2, []), (vecval2, [])]
+  newResult2 <- call f' [(result2, []), (vecval2, [])]
   store resultptr 1 newResult2
 
   succLoopIdx21 <- add loopIdx21 $ int32 1
@@ -307,6 +332,3 @@ foldlImpl (name, (argst, resultt)) = function (Name name) (zip argst ["f", "init
   end <- block `named` "end"
   result <- load resultptr 1
   ret result
-  where
-    PointerType (FunctionType _ fargsList _) _ = head argst
-    a = fargsList !! 1

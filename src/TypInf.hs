@@ -166,7 +166,10 @@ initalTenv =
     [ ("print_int", TFun TInt TUnit),
       ("get", TFun TInt (TFun (TVector $ QVar 0) $ QVar 0)),
       ("foldl", foldlType),
-      ("length", TFun (TVector $ QVar 0) TInt)
+      ("length", TFun (TVector $ QVar 0) TInt),
+      ("$$deref", TFun (TRef (QVar 0)) (QVar 0)),
+      (":=", TFun (TRef (QVar 0)) (TFun (QVar 0) TUnit)),
+      ("ref", TFun (QVar 0) (TRef (QVar 0)))
     ]
 
 newTVar :: StateT TEnv IO Typ
@@ -185,6 +188,7 @@ instantiate t = evalStateT (go t) M.empty
     go TUnit = pure TUnit
     go (TFun t1 t2) = TFun <$> go t1 <*> go t2
     go (TVector t) = TVector <$> go t
+    go (TRef t) = TRef <$> go t
     go ty@(TVar _ r) = do
       t <- liftIO $ readIORef r
       case t of
@@ -204,6 +208,7 @@ unify TInt TInt = pure ()
 unify TBool TBool = pure ()
 unify TUnit TUnit = pure ()
 unify (TVector t1) (TVector t2) = unify t1 t2
+unify (TRef t1) (TRef t2) = unify t1 t2
 unify (TFun t11 t21) (TFun t12 t22) = do
   unify t11 t12
   unify t21 t22
@@ -239,6 +244,7 @@ occur :: Integer -> Typ -> StateT TEnv IO Bool
 occur _ TInt = pure False
 occur _ TBool = pure False
 occur _ TUnit = pure False
+occur n (TRef t) = occur n t
 occur n (TVector t) = occur n t
 occur n (TFun t1 t2) = (||) <$> occur n t1 <*> occur n t2
 occur n (TVar m r) =

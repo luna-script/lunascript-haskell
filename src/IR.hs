@@ -4,7 +4,7 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeFamilies           #-}
 
-module IR (IRStmt (..), IRExpr (..), IRBlockStmt (..), ToIR (toIR), convertStmtsToIRStmts, execConvertStmtsToIRStmts, ConvertEnv, PolymorphicFunType, HasPolymorphicFun (polymorphicFun), HasEnv (env), HasGlobalConstant (globalConstant)) where
+module IR (IRStmt (..), IRExpr (..), IRBlockStmt (..), ToIR (toIR), convertStmtsToIRStmts, execConvertStmtsToIRStmts, ConvertEnv, PolymorphicFunType, HasEnv (env), HasGlobalConstant (globalConstant)) where
 
 import           AST
 import           Control.Lens
@@ -27,8 +27,7 @@ data ConvertEnv = ConvertEnv
   { _convertEnvGlobalConstant :: M.Map P.ShortByteString AST.Type,
     _convertEnvEnv            :: M.Map P.ShortByteString AST.Type,
     _convertEnvUnusedNum      :: Int,
-    _convertEnvGenerateList   :: [Stmt SimpleTyped],
-    _convertEnvPolymorphicFun :: PolymorphicFunType
+    _convertEnvGenerateList   :: [Stmt SimpleTyped]
   }
 
 makeFields ''ConvertEnv
@@ -151,10 +150,8 @@ convertStmtsToIRStmts stmts = do
   pure $ stmt ++ newStmt
 
 execConvertStmtsToIRStmts :: (MonadIRBuilder m) => [Stmt SimpleTyped] -> ([IRStmt m], ConvertEnv)
-execConvertStmtsToIRStmts stmts = runIdentity $ runStateT (convertStmtsToIRStmts stmts) (ConvertEnv M.empty initialEnv 0 [] initialPolymorphicFun)
+execConvertStmtsToIRStmts stmts = runIdentity $ runStateT (convertStmtsToIRStmts stmts) (ConvertEnv M.empty initialEnv 0 [])
 
 initialEnv :: Map P.ShortByteString Type
 initialEnv = M.fromList [("print_int", toLLVMType $ TFun' TInt' TUnit')]
 
-initialPolymorphicFun :: PolymorphicFunType
-initialPolymorphicFun = M.fromList [("get", M.empty), ("foldl", M.empty), ("length", M.empty)]

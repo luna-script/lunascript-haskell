@@ -153,5 +153,10 @@ execConvertStmtsToIRStmts :: (MonadIRBuilder m) => [Stmt SimpleTyped] -> ([IRStm
 execConvertStmtsToIRStmts stmts = runIdentity $ runStateT (convertStmtsToIRStmts stmts) (ConvertEnv M.empty initialEnv 0 [])
 
 initialEnv :: Map P.ShortByteString Type
-initialEnv = M.fromList [("print_int", toLLVMType $ TFun' TInt' TUnit')]
-
+initialEnv =
+  M.fromList
+    [ ("print_int", toLLVMType $ TFun' TInt' TUnit'),
+      ("$$deref", toLLVMType $ TFun' (TRef' (QVar' 0)) $ QVar' 0),
+      ("ref", toLLVMType $ TFun' (QVar' 0) $ TRef' (QVar' 0)),
+      (":=", toLLVMType $ TFun' (TRef' (QVar' 0)) $ TFun' (QVar' 0) TUnit')
+    ]

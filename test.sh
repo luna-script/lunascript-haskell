@@ -185,3 +185,41 @@ let main = id(id(1)==0);"
 assert 0 "let id(n) = n;
 let id2(n) = id(n);
 let main = id2(id2(1)==0);"
+assert 4 "let main = {
+  let a = ref(4);
+  *a
+}"
+assert 10 "let main = {
+  let a = ref(4);
+  a := *a + 6;
+  *a
+}"
+assert 8 "let main = {
+  let a = ref(4);
+  a := 2 * *a;
+  *a
+}"
+assert 6 "
+let func(ref) = {
+  ref := *ref * 2
+};
+let main = {
+  let a = ref(3);
+  func(a);
+  *a
+}
+"
+assertStdOut 3 "
+let main = {
+  let a = ref(3);
+  print_int(*a)
+}"
+assertStdOut 3 "
+let func(r) = {
+  print_int(*r)
+};
+let main = {
+  let a = ref(3);
+  func(a)
+}
+"

@@ -221,5 +221,4 @@ let func(r) = {
 let main = {
   let a = ref(3);
   func(a)
-}
-"
+}"

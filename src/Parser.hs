@@ -56,7 +56,9 @@ keywords = ["let", "if", "else", "fn"]
 
 ops :: [[Operator Parser (Expr Parsed)]]
 ops =
-  [ [Prefix (BinOp "*" (EInt (-1)) <$ symbol "-")],
+  [ [ Prefix (BinOp "*" (EInt (-1)) <$ symbol "-"),
+      Prefix (FunApp (Var (ParsedVar Nothing "$$deref")) <$ symbol "*")
+    ],
     [ InfixL (BinOp "*" <$ symbol "*"),
       InfixL (BinOp "/" <$ symbol "/")
     ],
@@ -65,6 +67,8 @@ ops =
     ],
     [ InfixN (BinOp "<" <$ symbol "<"),
       InfixN (BinOp "==" <$ symbol "==")
+    ],
+    [ InfixL ((FunApp . FunApp (Var (ParsedVar Nothing ":="))) <$ symbol ":=")
     ]
   ]
 
@@ -232,7 +236,7 @@ typeFun = do
   TFun t1 <$> typeWithFun
 
 typeAnnotate :: Parser (DT.Text, Typ)
-typeAnnotate =  do
+typeAnnotate = do
   ident <- identifier
   symbol ":"
   t <- evalType

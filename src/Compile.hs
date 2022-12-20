@@ -50,19 +50,19 @@ bit1 :: Integer
 bit1 = 5
 
 toAnyType :: (MonadIRBuilder m) => Typ' -> Operand -> m Operand
-toAnyType TInt' e  = inttoptr e (ptr i8)
+toAnyType TInt' e = inttoptr e (ptr i8)
 toAnyType TBool' e = do
   e' <- alloca i1 Nothing 0
   store e' 0 e
   bitcast e' (ptr i8)
-toAnyType _ e      = bitcast e (ptr i8)
+toAnyType _ e = bitcast e (ptr i8)
 
 fromAnyType :: MonadIRBuilder m => Typ' -> Operand -> m Operand
-fromAnyType TInt' e  = ptrtoint e i64
+fromAnyType TInt' e = ptrtoint e i64
 fromAnyType TBool' e = do
   e' <- bitcast e (ptr i1)
   load e' 0
-fromAnyType t e      = bitcast e (toLLVMType t)
+fromAnyType t e = bitcast e (toLLVMType t)
 
 compileIRExpr :: (MonadState s m, MonadFix m, MonadModuleBuilder m, MonadIRBuilder m, HasGlobalConstant s GlobalContextMap, HasEnv s EnvMap) => IRExpr m -> m Operand
 compileIRExpr (IRInt n) = pure $ int64 n
@@ -197,6 +197,7 @@ compileToLLVM ast convertEnv =
    in ppllvm $
         buildModule "main" $ do
           printf <- externVarArgs "printf" [ptr i8] i64
+          malloc <- externVarArgs "malloc" [i64] (ptr i8)
           formatint <- globalStringPtr "%d" "$$$formatint"
           function "print_int" [(ptr i8, "n")] (ptr i8) $ \[n] -> do
             n' <- fromAnyType TInt' n
@@ -205,6 +206,9 @@ compileToLLVM ast convertEnv =
           getFun <- getImpl
           foldlFun <- foldlImpl
           lengthFun <- lengthImpl
+          refImpl malloc
+          derefImpl
+          refassignImpl
           let env'' = M.union env' (M.fromList [("foldl", foldlFun), ("length", lengthFun), ("get", getFun)])
           evalStateT (compileIRStmts ast) (Env globalEnv' env'')
 
@@ -215,6 +219,26 @@ lengthImpl = function "length" [(ptr i8, "vec")] (ptr i8) $ \[vec] -> do
   idx <- load idxptr 1
   idx' <- inttoptr idx (ptr i8)
   ret idx'
+
+derefImpl :: (MonadModuleBuilder m) => m Operand
+derefImpl = function "$$deref" [(ptr i8, "ref")] (ptr i8) $ \[ref] -> do
+  ref' <- fromAnyType (TRef' (QVar' 0)) ref
+  result <- load ref' 0
+  ret result
+
+refImpl :: (MonadModuleBuilder m) => Operand -> m Operand
+refImpl malloc = function "ref" [(ptr i8, "a")] (ptr i8) $ \[a] -> do
+  a' <- call malloc [(int64 8, [])]
+  a'' <- bitcast a' (ptr (ptr i8))
+  store a'' 0 a
+  result <- toAnyType (TRef' (QVar' 0)) a''
+  ret result
+
+refassignImpl :: (MonadModuleBuilder m) => m Operand
+refassignImpl = function ":=" [(ptr i8, "ref"), (ptr i8, "val")] (ptr i8) $ \[ref, val] -> do
+  ref' <- fromAnyType (TRef' (QVar' 0)) ref
+  store ref' 0 val
+  ret llvmUnit
 
 llvmUnit :: Operand
 llvmUnit = ConstantOperand (Undef unitType)

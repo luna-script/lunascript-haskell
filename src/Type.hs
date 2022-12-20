@@ -14,6 +14,7 @@ data Typ
   | TBool
   | TUnit
   | TFun Typ Typ
+  | TRef Typ
   | TVector Typ
   | TVar Integer (IORef (Maybe Typ))
   | QVar Integer
@@ -23,6 +24,7 @@ data Typ'
   | TBool'
   | TUnit'
   | TFun' Typ' Typ'
+  | TRef' Typ'
   | TVector' Typ'
   | QVar' Integer
   deriving (Show, Eq)
@@ -33,6 +35,7 @@ toTyp TBool'        = TBool
 toTyp TUnit'        = TUnit
 toTyp (TFun' t1 t2) = TFun (toTyp t1) (toTyp t2)
 toTyp (TVector' t)  = TVector (toTyp t)
+toTyp (TRef' t)     = TRef (toTyp t)
 toTyp (QVar' n)     = QVar n
 
 showTyp :: Typ -> IO String
@@ -46,6 +49,9 @@ showTyp (TFun t1 t2) = do
   t1' <- showTyp t1
   t2' <- showTyp t2
   pure $ t1' ++ "->" ++ t2'
+showTyp (TRef t) = do
+  t' <- showTyp t
+  pure $ "Ref (" ++ t' ++ ")"
 showTyp (TVar n r) = do
   t <- readIORef r
   case t of
@@ -63,6 +69,7 @@ instance ToTyp' Typ where
   toTyp' TBool = pure TBool'
   toTyp' TUnit = pure TUnit'
   toTyp' (QVar n) = pure $ QVar' n
+  toTyp' (TRef t) = TRef' <$> toTyp' t
   toTyp' (TFun t1 t2) = do
     t1' <- toTyp' t1
     t2' <- toTyp' t2
@@ -82,6 +89,7 @@ instance ToLLVMType Typ' where
   toLLVMType TBool' = ASTType.i1
   toLLVMType TUnit' = unitType
   toLLVMType (QVar' _) = ptr ASTType.i8
+  toLLVMType (TRef' t) = ptr (toLLVMType t)
   toLLVMType (TVector' _) = vectorType
   toLLVMType t@(TFun' _ _) =
     let (argsType, _) = separateFunType t

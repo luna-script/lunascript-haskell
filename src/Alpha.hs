@@ -50,6 +50,7 @@ alpha' (TopLevelLet (SimpleTypedVar t name) e) = do
     alphaExpr e@(EInt _) = pure e
     alphaExpr e@(EBool _) = pure e
     alphaExpr (EIf cond e1 e2) = EIf <$> alphaExpr cond <*> alphaExpr e1 <*> alphaExpr e2
+    alphaExpr (EPair e1 e2) = EPair <$> alphaExpr e1 <*> alphaExpr e2
     alphaExpr (BinOp op e1 e2) = BinOp op <$> alphaExpr e1 <*> alphaExpr e2
     alphaExpr (EVector (SimpleTypedVec t vec)) = EVector . SimpleTypedVec t <$> mapM alphaExpr vec
     alphaExpr EUnit = pure EUnit

@@ -45,7 +45,7 @@ symbol = L.symbol sc
 
 identifier :: Parser DT.Text
 identifier = lexeme $ do
-  firstLetter <- oneOf ['a' .. 'z']
+  firstLetter <- oneOf ('_':['a' .. 'z'])
   middleLetters <- many (oneOf (['0' .. '9'] ++ ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['_']))
   lastLetters <- many (oneOf ['!', '?', '_', '\''])
   let name = DT.pack $ firstLetter : (middleLetters ++ lastLetters)

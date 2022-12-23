@@ -222,3 +222,11 @@ let main = {
   let a = ref(3);
   func(a)
 }"
+assert 6 "let main = {
+  let _a0 = 3;
+  _a0 * 2
+}"
+assert 6 "let main = {
+  let a' = 3;
+  a' * 2
+}"

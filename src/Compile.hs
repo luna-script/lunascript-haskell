@@ -72,6 +72,17 @@ compileIRExpr (IROp op e1 e2) = do
   e1' <- compileIRExpr e1
   e2' <- compileIRExpr e2
   op e1' e2'
+compileIRExpr (IRPair (t1, e1) (t2, e2)) = do
+  e1' <- compileIRExpr e1
+  e2' <- compileIRExpr e2
+  pair <- alloca (StructureType False [ptr i8, ptr i8]) Nothing 1
+  e1'' <- toAnyType t1 e1'
+  e2'' <- toAnyType t2 e2'
+  fstptr <- gep pair [int32 0, int32 0]
+  store fstptr 1 e1''
+  sndptr <- gep pair [int32 0, int32 1]
+  store sndptr 1 e2''
+  pure pair
 compileIRExpr (IRVector t xs) = mdo
   let len = toInteger $ length xs
   cond <- icmp IP.SLT (int32 len) $ int32 (width1 + 1)

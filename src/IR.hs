@@ -41,6 +41,7 @@ data IRExpr m where
   IRBool :: Bool -> IRExpr m
   IRUnit :: IRExpr m
   IRVector :: Typ' -> [IRExpr m] -> IRExpr m
+  IRPair :: (Typ', IRExpr m) -> (Typ', IRExpr m) -> IRExpr m
   IROp :: (MonadIRBuilder m) => (Operand -> Operand -> m Operand) -> IRExpr m -> IRExpr m -> IRExpr m
   IRIf :: IRExpr m -> IRExpr m -> IRExpr m -> IRExpr m
   IRVar :: P.ShortByteString -> IRExpr m
@@ -67,6 +68,12 @@ instance ToIR (Expr SimpleTyped) where
   toIR (EBool b) = pure $ IRBool b
   toIR EUnit = pure IRUnit
   toIR (EVector (SimpleTypedVec t xs)) = IRVector t <$> mapM toIR xs
+  toIR (EPair e1 e2) = do
+    let t1 = typeOf e1
+    let t2 = typeOf e2
+    e1' <- toIR e1
+    e2' <- toIR e2
+    pure $ IRPair (t1, e1') (t2, e2')
   toIR (BinOp op lh rh) = do
     lh' <- toIR lh
     rh' <- toIR rh

@@ -15,6 +15,7 @@ data Expr a where
   EInt :: Integer -> Expr a
   EBool :: Bool -> Expr a
   EUnit :: Expr a
+  EPair :: Expr a -> Expr a -> Expr a
   Var :: XVar a -> Expr a
   EIf :: Expr a -> Expr a -> Expr a -> Expr a
   Fun :: XVar a -> Expr a -> Expr a
@@ -75,6 +76,7 @@ instance TypeOf (Expr Typed) where
   typeOf (EInt _) = TInt
   typeOf (EBool _) = TBool
   typeOf EUnit = TUnit
+  typeOf (EPair e1 e2) = TPair (typeOf e1) (typeOf e2)
   typeOf (Var (TypedVar t _)) = t
   typeOf (EIf _ e _) = typeOf e
   typeOf (Fun (TypedVar t _) e) = TFun t (typeOf e)
@@ -96,6 +98,7 @@ instance TypeOf (Expr SimpleTyped) where
     _    -> error "unimplemented"
   typeOf (EInt _) = TInt'
   typeOf (EBool _) = TBool'
+  typeOf (EPair e1 e2) = TPair' (typeOf e1) (typeOf e2)
   typeOf EUnit = TUnit'
   typeOf (Var (SimpleTypedVar t _)) = t
   typeOf (EIf _ e _) = typeOf e
@@ -119,6 +122,7 @@ instance ToSimpleTyped (Expr Typed) where
     e1' <- toSimpleTyped e1
     e2' <- toSimpleTyped e2
     pure $ BinOp op e1' e2'
+  toSimpleTyped (EPair e1 e2) = EPair <$> toSimpleTyped e1 <*> toSimpleTyped e2
   toSimpleTyped (Var (TypedVar t name)) = do
     t' <- toTyp' t
     pure $ Var $ SimpleTypedVar t' name

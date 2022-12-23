@@ -78,13 +78,25 @@ expr = makeExprParser factor ops
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
+pair :: Parser (Expr Parsed)
+pair = do
+  symbol "("
+  e1 <- expr
+  symbol ","
+  e2 <- expr
+  symbol ")"
+  pure $ EPair e1 e2
+
 factor :: Parser (Expr Parsed)
 factor =
   try (parens expr)
-    <|> do
-      symbol "("
-      symbol ")"
-      pure EUnit
+    <|> try
+      ( do
+          symbol "("
+          symbol ")"
+          pure EUnit
+      )
+    <|> pair
     <|> block
     <|> exprIf
     <|> lambda

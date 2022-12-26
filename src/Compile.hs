@@ -220,8 +220,24 @@ compileToLLVM ast convertEnv =
           refImpl malloc
           derefImpl
           refassignImpl
+          _1Impl
+          _0Impl
           let env'' = M.union env' (M.fromList [("foldl", foldlFun), ("length", lengthFun), ("get", getFun)])
           evalStateT (compileIRStmts ast) (Env globalEnv' env'')
+
+_0Impl :: (MonadModuleBuilder m) => m Operand
+_0Impl = function "_0" [(ptr i8, "pair")] (ptr i8) $ \[pair] -> do
+  pair' <- fromAnyType (TPair' (QVar' 0) (QVar' 0)) pair
+  p <- gep pair' [int32 0, int32 0]
+  result <- load p 1
+  ret result
+
+_1Impl :: (MonadModuleBuilder m) => m Operand
+_1Impl = function "_1" [(ptr i8, "pair")] (ptr i8) $ \[pair] -> do
+  pair' <- fromAnyType (TPair' (QVar' 0) (QVar' 0)) pair
+  p <- gep pair' [int32 0, int32 1]
+  result <- load p 1
+  ret result
 
 lengthImpl :: (MonadModuleBuilder m) => m Operand
 lengthImpl = function "length" [(ptr i8, "vec")] (ptr i8) $ \[vec] -> do

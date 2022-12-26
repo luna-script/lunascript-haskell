@@ -235,3 +235,5 @@ assert 3 "let main = [1, 2, 3].length()"
 assert 6 "let main = [1, 2, 3].foldl(fn a, b -> a + b, 0)"
 assert 4 "let add(a, b) = a + b;
 let main = [1, 2, 3].length.add(1)"
+assert 4 "let main = (4,5)._0"
+assert 5 "let main = (4,5)._1"

@@ -165,5 +165,7 @@ initialEnv =
     [ ("print_int", toLLVMType $ TFun' TInt' TUnit'),
       ("$$deref", toLLVMType $ TFun' (TRef' (QVar' 0)) $ QVar' 0),
       ("ref", toLLVMType $ TFun' (QVar' 0) $ TRef' (QVar' 0)),
-      (":=", toLLVMType $ TFun' (TRef' (QVar' 0)) $ TFun' (QVar' 0) TUnit')
+      (":=", toLLVMType $ TFun' (TRef' (QVar' 0)) $ TFun' (QVar' 0) TUnit'),
+      ("_0", toLLVMType $ TFun' (TPair' (QVar' 0) (QVar' 1)) $ QVar' 0),
+      ("_1", toLLVMType $ TFun' (TPair' (QVar' 0) (QVar' 1)) $ QVar' 1)
     ]

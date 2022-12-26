@@ -230,3 +230,8 @@ assert 6 "let main = {
   let a' = 3;
   a' * 2
 }"
+assert 3 "let main = [1, 2, 3].length"
+assert 3 "let main = [1, 2, 3].length()"
+assert 6 "let main = [1, 2, 3].foldl(fn a, b -> a + b, 0)"
+assert 4 "let add(a, b) = a + b;
+let main = [1, 2, 3].length.add(1)"

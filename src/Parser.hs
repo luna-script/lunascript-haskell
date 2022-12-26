@@ -69,8 +69,14 @@ ops =
       InfixN (BinOp "==" <$ symbol "==")
     ],
     [ InfixL ((FunApp . FunApp (Var (ParsedVar Nothing ":="))) <$ symbol ":=")
-    ]
+    ],
+    [ InfixL (dot <$ symbol ".")]
   ]
+
+dot :: Expr a -> Expr a -> Expr a
+dot e1 e2 = case e2 of
+  FunApp e' EUnit -> FunApp e' e1
+  _               -> FunApp e2 e1
 
 expr :: Parser (Expr Parsed)
 expr = makeExprParser factor ops
@@ -195,6 +201,7 @@ block = do
                 BLet symbol' (ParsedVar Nothing ident) <$> expr
             )
         <|> BExprStmt <$> expr
+
 
 lambda :: Parser (Expr Parsed)
 lambda = do

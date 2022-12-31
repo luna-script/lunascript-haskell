@@ -45,7 +45,7 @@ symbol = L.symbol sc
 
 identifier :: Parser DT.Text
 identifier = lexeme $ do
-  firstLetter <- oneOf ['a' .. 'z']
+  firstLetter <- oneOf ('_' : ['a' .. 'z'])
   middleLetters <- many (oneOf (['0' .. '9'] ++ ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['_']))
   lastLetters <- many (oneOf ['!', '?', '_', '\''])
   let name = DT.pack $ firstLetter : (middleLetters ++ lastLetters)
@@ -69,8 +69,14 @@ ops =
       InfixN (BinOp "==" <$ symbol "==")
     ],
     [ InfixL ((FunApp . FunApp (Var (ParsedVar Nothing ":="))) <$ symbol ":=")
-    ]
+    ],
+    [InfixL (dot <$ symbol ".")]
   ]
+
+dot :: Expr a -> Expr a -> Expr a
+dot e1 e2 = case e2 of
+  FunApp e' EUnit -> FunApp e' e1
+  _               -> FunApp e2 e1
 
 expr :: Parser (Expr Parsed)
 expr = makeExprParser factor ops
@@ -78,13 +84,25 @@ expr = makeExprParser factor ops
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
+pair :: Parser (Expr Parsed)
+pair = do
+  symbol "("
+  e1 <- expr
+  symbol ","
+  e2 <- expr
+  symbol ")"
+  pure $ EPair e1 e2
+
 factor :: Parser (Expr Parsed)
 factor =
   try (parens expr)
-    <|> do
-      symbol "("
-      symbol ")"
-      pure EUnit
+    <|> try
+      ( do
+          symbol "("
+          symbol ")"
+          pure EUnit
+      )
+    <|> pair
     <|> block
     <|> exprIf
     <|> lambda

@@ -72,6 +72,17 @@ compileIRExpr (IROp op e1 e2) = do
   e1' <- compileIRExpr e1
   e2' <- compileIRExpr e2
   op e1' e2'
+compileIRExpr (IRPair (t1, e1) (t2, e2)) = do
+  e1' <- compileIRExpr e1
+  e2' <- compileIRExpr e2
+  pair <- alloca (StructureType False [ptr i8, ptr i8]) Nothing 1
+  e1'' <- toAnyType t1 e1'
+  e2'' <- toAnyType t2 e2'
+  fstptr <- gep pair [int32 0, int32 0]
+  store fstptr 1 e1''
+  sndptr <- gep pair [int32 0, int32 1]
+  store sndptr 1 e2''
+  pure pair
 compileIRExpr (IRVector t xs) = mdo
   let len = toInteger $ length xs
   cond <- icmp IP.SLT (int32 len) $ int32 (width1 + 1)
@@ -209,8 +220,24 @@ compileToLLVM ast convertEnv =
           refImpl malloc
           derefImpl
           refassignImpl
+          _1Impl
+          _0Impl
           let env'' = M.union env' (M.fromList [("foldl", foldlFun), ("length", lengthFun), ("get", getFun)])
           evalStateT (compileIRStmts ast) (Env globalEnv' env'')
+
+_0Impl :: (MonadModuleBuilder m) => m Operand
+_0Impl = function "_0" [(ptr i8, "pair")] (ptr i8) $ \[pair] -> do
+  pair' <- fromAnyType (TPair' (QVar' 0) (QVar' 0)) pair
+  p <- gep pair' [int32 0, int32 0]
+  result <- load p 1
+  ret result
+
+_1Impl :: (MonadModuleBuilder m) => m Operand
+_1Impl = function "_1" [(ptr i8, "pair")] (ptr i8) $ \[pair] -> do
+  pair' <- fromAnyType (TPair' (QVar' 0) (QVar' 0)) pair
+  p <- gep pair' [int32 0, int32 1]
+  result <- load p 1
+  ret result
 
 lengthImpl :: (MonadModuleBuilder m) => m Operand
 lengthImpl = function "length" [(ptr i8, "vec")] (ptr i8) $ \[vec] -> do

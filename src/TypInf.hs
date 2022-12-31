@@ -64,6 +64,10 @@ tinfExpr (BinOp op e1 e2) | op `elem` ["==", "<", ">"] = do
   unify t2 TInt
   pure (TBool, BinOp op e1' e2')
 tinfExpr BinOp {} = error "unimpremented"
+tinfExpr (EPair e1 e2) = do
+  (t1, e1') <- tinfExpr e1
+  (t2, e2') <- tinfExpr e2
+  pure (TPair t1 t2, EPair e1' e2')
 tinfExpr (Var (ParsedVar t x)) = do
   tenv <- use typeEnv
   case M.lookup x tenv of
@@ -144,7 +148,10 @@ generalize (TVector t) = do
 generalize (TFun t1 t2) = do
   generalize t1
   generalize t2
-generalize ty = pure ()
+generalize (TPair t1 t2) = do
+  generalize t1
+  generalize t2
+generalize _ = pure ()
 
 execTinfStmts :: [Stmt Parsed] -> S.Set Text -> IO [Stmt Typed]
 execTinfStmts stmts varNames =
@@ -169,7 +176,9 @@ initalTenv =
       ("length", TFun (TVector $ QVar 0) TInt),
       ("$$deref", TFun (TRef (QVar 0)) (QVar 0)),
       (":=", TFun (TRef (QVar 0)) (TFun (QVar 0) TUnit)),
-      ("ref", TFun (QVar 0) (TRef (QVar 0)))
+      ("ref", TFun (QVar 0) (TRef (QVar 0))),
+      ("_0", TFun (TPair (QVar 0) (QVar 1)) $ QVar 0),
+      ("_1", TFun (TPair (QVar 0) (QVar 1)) $ QVar 1)
     ]
 
 newTVar :: StateT TEnv IO Typ
@@ -189,6 +198,7 @@ instantiate t = evalStateT (go t) M.empty
     go (TFun t1 t2) = TFun <$> go t1 <*> go t2
     go (TVector t) = TVector <$> go t
     go (TRef t) = TRef <$> go t
+    go (TPair t1 t2) = TPair <$> go t1 <*> go t2
     go ty@(TVar _ r) = do
       t <- liftIO $ readIORef r
       case t of
@@ -210,6 +220,9 @@ unify TUnit TUnit = pure ()
 unify (TVector t1) (TVector t2) = unify t1 t2
 unify (TRef t1) (TRef t2) = unify t1 t2
 unify (TFun t11 t21) (TFun t12 t22) = do
+  unify t11 t12
+  unify t21 t22
+unify (TPair t11 t21) (TPair t12 t22) = do
   unify t11 t12
   unify t21 t22
 unify (TVar n1 _) (TVar n2 _) | n1 == n2 = pure ()
@@ -247,6 +260,7 @@ occur _ TUnit = pure False
 occur n (TRef t) = occur n t
 occur n (TVector t) = occur n t
 occur n (TFun t1 t2) = (||) <$> occur n t1 <*> occur n t2
+occur n (TPair t1 t2) = (||) <$> occur n t1 <*> occur n t2
 occur n (TVar m r) =
   if n == m
     then pure True

@@ -45,7 +45,7 @@ symbol = L.symbol sc
 
 identifier :: Parser DT.Text
 identifier = lexeme $ do
-  firstLetter <- oneOf ('_':['a' .. 'z'])
+  firstLetter <- oneOf ('_' : ['a' .. 'z'])
   middleLetters <- many (oneOf (['0' .. '9'] ++ ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['_']))
   lastLetters <- many (oneOf ['!', '?', '_', '\''])
   let name = DT.pack $ firstLetter : (middleLetters ++ lastLetters)
@@ -70,7 +70,7 @@ ops =
     ],
     [ InfixL ((FunApp . FunApp (Var (ParsedVar Nothing ":="))) <$ symbol ":=")
     ],
-    [ InfixL (dot <$ symbol ".")]
+    [InfixL (dot <$ symbol ".")]
   ]
 
 dot :: Expr a -> Expr a -> Expr a
@@ -201,7 +201,6 @@ block = do
                 BLet symbol' (ParsedVar Nothing ident) <$> expr
             )
         <|> BExprStmt <$> expr
-
 
 lambda :: Parser (Expr Parsed)
 lambda = do

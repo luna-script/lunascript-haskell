@@ -165,21 +165,7 @@ execTinfStmts stmts varNames =
         varNames
         >> tinfStmts stmts
     )
-    (TEnv 0 initalTenv)
-
-initalTenv :: M.Map Text Typ
-initalTenv =
-  M.fromList
-    [ ("print_int", TFun TInt TUnit),
-      ("get", TFun TInt (TFun (TVector $ QVar 0) $ QVar 0)),
-      ("foldl", foldlType),
-      ("length", TFun (TVector $ QVar 0) TInt),
-      ("$$deref", TFun (TRef (QVar 0)) (QVar 0)),
-      (":=", TFun (TRef (QVar 0)) (TFun (QVar 0) TUnit)),
-      ("ref", TFun (QVar 0) (TRef (QVar 0))),
-      ("_0", TFun (TPair (QVar 0) (QVar 1)) $ QVar 0),
-      ("_1", TFun (TPair (QVar 0) (QVar 1)) $ QVar 1)
-    ]
+    (TEnv 0 initialTenv)
 
 newTVar :: StateT TEnv IO Typ
 newTVar = do

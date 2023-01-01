@@ -2,6 +2,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TupleSections          #-}
 {-# LANGUAGE TypeFamilies           #-}
 
 module IR (IRStmt (..), IRExpr (..), IRBlockStmt (..), ToIR (toIR), convertStmtsToIRStmts, execConvertStmtsToIRStmts, ConvertEnv, PolymorphicFunType, HasEnv (env), HasGlobalConstant (globalConstant)) where
@@ -156,16 +157,5 @@ convertStmtsToIRStmts stmts = do
   newStmt <- mapM toIR genList
   pure $ stmt ++ newStmt
 
-execConvertStmtsToIRStmts :: (MonadIRBuilder m) => [Stmt SimpleTyped] -> ([IRStmt m], ConvertEnv)
-execConvertStmtsToIRStmts stmts = runIdentity $ runStateT (convertStmtsToIRStmts stmts) (ConvertEnv M.empty initialEnv 0 [])
-
-initialEnv :: Map P.ShortByteString Type
-initialEnv =
-  M.fromList
-    [ ("print_int", toLLVMType $ TFun' TInt' TUnit'),
-      ("$$deref", toLLVMType $ TFun' (TRef' (QVar' 0)) $ QVar' 0),
-      ("ref", toLLVMType $ TFun' (QVar' 0) $ TRef' (QVar' 0)),
-      (":=", toLLVMType $ TFun' (TRef' (QVar' 0)) $ TFun' (QVar' 0) TUnit'),
-      ("_0", toLLVMType $ TFun' (TPair' (QVar' 0) (QVar' 1)) $ QVar' 0),
-      ("_1", toLLVMType $ TFun' (TPair' (QVar' 0) (QVar' 1)) $ QVar' 1)
-    ]
+execConvertStmtsToIRStmts :: (MonadIRBuilder m) => M.Map P.ShortByteString Type -> [Stmt SimpleTyped] -> ([IRStmt m], ConvertEnv)
+execConvertStmtsToIRStmts initialEnv stmts = runIdentity $ runStateT (convertStmtsToIRStmts stmts) (ConvertEnv M.empty initialEnv 0 [])

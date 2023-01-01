@@ -1,13 +1,17 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Type (Typ (..), Typ' (..), showTyp, ToTyp' (toTyp'), ToLLVMType (..), separateFunType, unitType, foldlLlvmType, foldlType, rawVector2Type, vector2Type, rawVector1Type, vector1Type, vectorType, toTyp, hasQVar) where
+module Type (initialLLVMenv, initialTenv, Typ (..), Typ' (..), showTyp, ToTyp' (toTyp'), ToLLVMType (..), separateFunType, unitType, foldlLlvmType, foldlType, rawVector2Type, vector2Type, rawVector1Type, vector1Type, vectorType, toTyp, hasQVar) where
 
-import           Data.IORef         (IORef)
-import           GHC.IORef          (readIORef)
+import           Data.IORef            (IORef)
+import qualified Data.Map              as M
+import           Data.String.Transform
+import           Data.Text
+import           GHC.IORef             (readIORef)
 import           LLVM.AST
-import           LLVM.AST.AddrSpace (AddrSpace (..))
+import           LLVM.AST.AddrSpace    (AddrSpace (..))
 import           LLVM.AST.Type
-import qualified LLVM.AST.Type      as ASTType
+import qualified LLVM.AST.Type         as ASTType
+import qualified LLVM.Prelude          as P
 
 data Typ
   = TInt
@@ -142,3 +146,22 @@ foldlType = TFun (TFun (QVar 1) (TFun (QVar 0) $ QVar 1)) $ TFun (QVar 1) $ TFun
 
 foldlLlvmType :: Type
 foldlLlvmType = toLLVMType $ TFun' (TFun' TInt' $ TFun' TInt' TInt') $ TFun' TInt' $ TFun' (TVector' TInt') TInt'
+
+initialTenv :: M.Map Text Typ
+initialTenv =
+  M.fromList
+    [ ("print_int", TFun TInt TUnit),
+      ("get", TFun TInt (TFun (TVector $ QVar 0) $ QVar 0)),
+      ("foldl", foldlType),
+      ("length", TFun (TVector $ QVar 0) TInt),
+      ("$$deref", TFun (TRef (QVar 0)) (QVar 0)),
+      (":=", TFun (TRef (QVar 0)) (TFun (QVar 0) TUnit)),
+      ("ref", TFun (QVar 0) (TRef (QVar 0))),
+      ("_0", TFun (TPair (QVar 0) (QVar 1)) $ QVar 0),
+      ("_1", TFun (TPair (QVar 0) (QVar 1)) $ QVar 1)
+    ]
+
+initialLLVMenv :: IO (M.Map P.ShortByteString Type)
+initialLLVMenv = do
+  let llvmEnv = M.mapKeys toShortByteString initialTenv
+  mapM (fmap toLLVMType . toTyp') llvmEnv

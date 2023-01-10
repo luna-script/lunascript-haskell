@@ -306,3 +306,8 @@ parseStmts :: Text -> ([Stmt Parsed], S.Set DT.Text)
 parseStmts str = case parse (runStateT (sc *> program <* lexeme eof) $ ParserEnv S.empty) "<stdin>" str of
   Left bundle            -> error $ errorBundlePretty bundle
   Right (ast, parserEnv) -> (ast, parserEnv ^. topLevelVarName)
+
+parseType :: Text -> Typ
+parseType str = case parse (runStateT (sc *> evalType) $ ParserEnv S.empty) "<stdin>" str of
+  Left bundle  -> error $ errorBundlePretty bundle
+  Right (t, _) -> t

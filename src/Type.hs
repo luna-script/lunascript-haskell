@@ -12,6 +12,7 @@ import           LLVM.AST.AddrSpace    (AddrSpace (..))
 import           LLVM.AST.Type
 import qualified LLVM.AST.Type         as ASTType
 import qualified LLVM.Prelude          as P
+import qualified Parser                (parseType)
 
 data Typ
   = TInt

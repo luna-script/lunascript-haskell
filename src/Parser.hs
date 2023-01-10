@@ -4,24 +4,46 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
-module Parser (Parser, sc, lexeme, symbol, identifier, keywords, ops, expr, parens, factor, vector, vectorGet, exprIf, app, appliedExpr, program, topLevelFunDef, block, lambda, topLevelLet, parseExpr, parseStmts) where
+module Parser (Parser, sc, lexeme, symbol, identifier, keywords, ops, expr, parens, factor, vector, vectorGet, exprIf, app, appliedExpr, program, topLevelFunDef, block, lambda, topLevelLet, parseExpr, parseStmts, parseType) where
 
-import           AST
-import           Control.Lens
-import           Control.Monad.Combinators.Expr
-import           Control.Monad.State
-import           Data.Foldable                  as F
-import           Data.Functor                   (($>))
-import qualified Data.Map                       as M
-import qualified Data.Set                       as S
-import           Data.String.Transform
-import qualified Data.Text                      as DT
-import           Data.Text.Internal.Lazy
-import           Data.Void
-import           Text.Megaparsec
-import           Text.Megaparsec.Char
-import qualified Text.Megaparsec.Char.Lexer     as L
-import           Type
+import {-# SOURCE #-}           AST                            (BlockStmt (..),
+                                                                Expr (..),
+                                                                Parsed,
+                                                                Stmt (..),
+                                                                XVar (ParsedVar),
+                                                                XVec (ParsedVec))
+import                          Control.Lens                   (Field1 (_1),
+                                                                Field2 (_2),
+                                                                Identity,
+                                                                makeFields, use,
+                                                                (.=), (^.))
+import                          Control.Monad.Combinators.Expr (Operator (InfixL, InfixN, Prefix),
+                                                                makeExprParser)
+import                          Control.Monad.State            (MonadState (get),
+                                                                MonadTrans (lift),
+                                                                StateT (runStateT),
+                                                                evalStateT)
+import                          Data.Foldable                  as F (Foldable (foldl', foldr))
+import                          Data.Functor                   (($>))
+import                qualified Data.Map                       as M
+import                qualified Data.Set                       as S
+import                          Data.String.Transform          (ToString (toString),
+                                                                ToTextStrict (toTextStrict))
+import                qualified Data.Text                      as DT
+import                          Data.Text.Internal.Lazy        (Text)
+import                          Data.Void                      (Void)
+import                          Text.Megaparsec                (MonadParsec (eof, try),
+                                                                ParsecT,
+                                                                between,
+                                                                errorBundlePretty,
+                                                                many, oneOf,
+                                                                optional, parse,
+                                                                sepBy, sepBy1,
+                                                                sepEndBy, some,
+                                                                (<|>))
+import                          Text.Megaparsec.Char           (space1)
+import                qualified Text.Megaparsec.Char.Lexer     as L
+import {-# SOURCE #-}           Type                           (Typ (QVar, TBool, TFun, TInt, TUnit, TVector))
 
 type Parser = StateT ParserEnv (ParsecT Void Text Identity)
 
